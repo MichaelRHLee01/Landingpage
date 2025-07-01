@@ -5,6 +5,357 @@ const { sendWeeklyEmails } = require('./emailer');
 const app = express();
 app.use(express.json());
 
+let CACHED_STANDARD_SAUCES = null;
+
+const getStandardSauces = async () => {
+    if (CACHED_STANDARD_SAUCES) return CACHED_STANDARD_SAUCES;
+
+    try {
+        // Fetch all 3 standard sauces in one query
+        const standardSauceRecords = await base('Ingredients').select({
+            filterByFormula: `OR({Ingredient ID} = 'SF Vinegar & Oil', {Ingredient ID} = 'SF Citrus Vinaigrette', {Ingredient ID} = '9156 Lemon')`
+        }).all();
+
+        CACHED_STANDARD_SAUCES = standardSauceRecords.map(record => ({
+            id: record.id,
+            name: record.fields['Ingredient Name'] || record.fields['Name'] || 'Unknown',
+            isActive: false
+        }));
+
+        // Add "No Sauce" option
+        CACHED_STANDARD_SAUCES.push({ id: null, name: 'No Sauce', isActive: false });
+
+        //console.log('🍶 Cached standard sauces:', CACHED_STANDARD_SAUCES.length);
+        return CACHED_STANDARD_SAUCES;
+    } catch (err) {
+        console.warn('Could not cache standard sauces:', err.message);
+        return [{ id: null, name: 'No Sauce', isActive: false }];
+    }
+};
+
+const getSauceAndGarnishOptions = async (allIngredientIds, ingredientNames, ingredientComponents, currentIngredientIds, originalIngredientIds, mealType) => {
+
+    //console.log('🍶 Getting sauce/garnish options for', allIngredientIds.length, 'ingredients');
+
+    // Find current sauce ingredients using ONLY the currently active ingredients
+    const currentSauceIngredients = currentIngredientIds
+        .filter(id => ingredientComponents[id] === 'Sauce')
+        .map(id => ({
+            id,
+            name: ingredientNames[id] || id,
+            isActive: true
+        }));
+
+    // Find original sauce ingredients (to always show as options)
+    const originalSauceIngredients = originalIngredientIds
+        .filter(id => ingredientComponents[id] === 'Sauce')
+        .map(id => ({
+            id,
+            name: ingredientNames[id] || id,
+            isActive: currentIngredientIds.includes(id) // Only active if in current
+        }));
+
+    // Get cached standard sauces
+    const standardSauces = await getStandardSauces();
+
+    // Mark any standard sauces that are currently active
+    const allSauceOptions = standardSauces.map(standardSauce => ({
+        ...standardSauce,
+        isActive: currentSauceIngredients.some(current => current.id === standardSauce.id)
+    }));
+
+    // Add original sauces that aren't in the standard list
+    originalSauceIngredients.forEach(originalSauce => {
+        if (!allSauceOptions.some(option => option.id === originalSauce.id)) {
+            allSauceOptions.unshift(originalSauce); // Add to beginning
+        }
+    });
+
+    // Add any current sauces that aren't in original or standard (edge case)
+    currentSauceIngredients.forEach(currentSauce => {
+        if (!allSauceOptions.some(option => option.id === currentSauce.id)) {
+            allSauceOptions.unshift(currentSauce);
+        }
+    });
+
+    // Check if "No Sauce" should be active (no current sauce ingredients)
+    const noSauceOption = allSauceOptions.find(option => option.id === null);
+    if (noSauceOption) {
+        noSauceOption.isActive = currentSauceIngredients.length === 0;
+    }
+
+
+    // Find ALL possible garnishes (from original + final) but mark correctly
+    const garnishOptions = allIngredientIds
+        .filter(id => ingredientComponents[id] === 'Garnish')
+        .map(id => {
+            const isActive = currentIngredientIds.includes(id);
+            //console.log(`🌿 Garnish ${ingredientNames[id]} (${id}): ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
+            return {
+                id,
+                name: ingredientNames[id] || id,
+                isActive: isActive
+            };
+        });
+
+    //console.log('🌿 Final garnish options:', garnishOptions);
+
+    const veggieStarchOptions = await getVeggieStarchOptions(allIngredientIds, ingredientNames, ingredientComponents, currentIngredientIds, originalIngredientIds, mealType);
+
+
+    return {
+        sauceOptions: allSauceOptions,
+        garnishOptions: garnishOptions,
+        veggieOptions: veggieStarchOptions.veggieOptions,
+        starchOptions: veggieStarchOptions.starchOptions
+    };
+};
+
+let CACHED_VARIANTS = null;
+
+const getCachedVariants = async () => {
+    if (CACHED_VARIANTS) return CACHED_VARIANTS;
+
+    try {
+        console.log('📦 Caching all variants...');
+        const allVariants = await base('Variants').select({
+            filterByFormula: `{Availability} = TRUE()`
+        }).all();
+
+        CACHED_VARIANTS = allVariants;
+        console.log(`📦 Cached ${allVariants.length} variants`);
+        return allVariants;
+    } catch (err) {
+        console.warn('Could not cache variants:', err.message);
+        return [];
+    }
+};
+
+const getCurrentProteinId = (currentIngredients, ingredientComponents) => {
+    for (const ingredientId of currentIngredients) {
+        if (ingredientComponents[ingredientId] === 'Meat') {
+            return ingredientId;
+        }
+    }
+    return null;
+};
+
+const getProteinOptionsForOrder = async (currentProteinId, mealType) => {
+    if (!currentProteinId) return { options: [], currentProtein: null };
+
+    try {
+        // Get current protein info
+        const currentProteinRecord = await base('Ingredients').find(currentProteinId);
+        const currentProteinIngredient = {
+            id: currentProteinId,
+            name: currentProteinRecord.fields['Ingredient Name'] || currentProteinRecord.fields['USDA Name'] || 'Unknown',
+        };
+
+        // Get cached variants (already cached)
+        const allVariants = await getCachedVariants();
+
+        // Find variant type for current protein
+        let relevantVariantType = null;
+        for (const variant of allVariants) {
+            const variantIngredients = variant.fields['Ingredient'] || [];
+            if (variantIngredients.includes(currentProteinId)) {
+                relevantVariantType = variant.fields['Variant Type'];
+                break;
+            }
+        }
+
+        if (!relevantVariantType) {
+            return { options: [], currentProtein: currentProteinIngredient };
+        }
+
+        // Get substitutions for this meal type
+        const proteinSubstitutions = allVariants.filter(variant => {
+            const variantType = variant.fields['Variant Type'];
+            const applicableTo = variant.fields['Applicable to'] || '';
+            return variantType === relevantVariantType && applicableTo.includes(mealType);
+        });
+
+        // Build options list
+        const proteinOptions = [];
+        for (const variant of proteinSubstitutions) {
+            const variantIngredientIds = variant.fields['Ingredient'] || [];
+            for (const ingredientId of variantIngredientIds) {
+                try {
+                    const ingredient = await base('Ingredients').find(ingredientId);
+                    proteinOptions.push({
+                        id: ingredientId,
+                        name: ingredient.fields['Ingredient Name'] || ingredient.fields['USDA Name'] || 'Unknown',
+                        variantName: variant.fields['Variant Name'],
+                        isActive: ingredientId === currentProteinId
+                    });
+                } catch (err) {
+                    console.warn('Could not fetch protein ingredient:', ingredientId);
+                }
+            }
+        }
+
+        return {
+            currentProtein: currentProteinIngredient,
+            options: proteinOptions
+        };
+
+    } catch (error) {
+        console.error('Error getting protein options:', error);
+        return { options: [], currentProtein: null };
+    }
+};
+
+const getVeggieStarchOptions = async (allIngredientIds, ingredientNames, ingredientComponents, currentIngredientIds, originalIngredientIds, mealType) => {
+    //console.log('🥕 Getting veggie/starch options for meal type:', mealType);
+
+    // Step 1: Find current veggies (mark green)
+    const currentVeggies = currentIngredientIds
+        .filter(id => ingredientComponents[id] === 'Veggies')
+        .map(id => ({
+            id,
+            name: ingredientNames[id] || id,
+            isActive: true,
+            source: 'current'
+        }));
+
+    // Step 2: Find original veggies that aren't current (mark gray)
+    const originalVeggies = originalIngredientIds
+        .filter(id => ingredientComponents[id] === 'Veggies' && !currentIngredientIds.includes(id))
+        .map(id => ({
+            id,
+            name: ingredientNames[id] || id,
+            isActive: false,
+            source: 'original'
+        }));
+
+    // Step 3: Get variant veggies for this meal
+    const allVariants = await getCachedVariants();
+    const variantVeggies = [];
+
+    for (const variant of allVariants) {
+        const variantType = variant.fields['Variant Type'];
+        const applicableTo = variant.fields['Applicable to'] || '';
+        const variantIngredients = variant.fields['Ingredient'] || [];
+
+        if (!applicableTo.includes(mealType) || variantType !== 'Veggie Substitution') continue;
+
+        for (const ingredientId of variantIngredients) {
+            const ingredientName = ingredientNames[ingredientId];
+            if (ingredientName) {
+                variantVeggies.push({
+                    id: ingredientId,
+                    name: ingredientName,
+                    isActive: currentIngredientIds.includes(ingredientId),
+                    source: 'variant'
+                });
+            }
+        }
+    }
+
+    // Step 4: Combine all, removing duplicates (prioritize current > original > variant)
+    const allVeggieIds = new Set();
+    const finalVeggieOptions = [];
+
+    // Add current veggies first
+    currentVeggies.forEach(veggie => {
+        allVeggieIds.add(veggie.id);
+        finalVeggieOptions.push(veggie);
+    });
+
+    // Add original veggies if not already added
+    originalVeggies.forEach(veggie => {
+        if (!allVeggieIds.has(veggie.id)) {
+            allVeggieIds.add(veggie.id);
+            finalVeggieOptions.push(veggie);
+        }
+    });
+
+    // Add variant veggies if not already added
+    variantVeggies.forEach(veggie => {
+        if (!allVeggieIds.has(veggie.id)) {
+            allVeggieIds.add(veggie.id);
+            finalVeggieOptions.push(veggie);
+        }
+    });
+
+    // console.log(`🥕 Final veggie options: ${finalVeggieOptions.length}`);
+    // console.log('🥕 Current (green):', currentVeggies.map(v => v.name));
+    // console.log('🥕 Original (gray):', originalVeggies.map(v => v.name));
+    // console.log('🥕 Variants (gray):', variantVeggies.filter(v => !currentIngredientIds.includes(v.id)).map(v => v.name));
+
+    // Step 5: Do the same for starch (but starch is replace-only, like sauce)
+    const currentStarch = currentIngredientIds
+        .filter(id => ingredientComponents[id] === 'Starch')
+        .map(id => ({
+            id,
+            name: ingredientNames[id] || id,
+            isActive: true,
+            source: 'current'
+        }));
+
+    const originalStarch = originalIngredientIds
+        .filter(id => ingredientComponents[id] === 'Starch' && !currentIngredientIds.includes(id))
+        .map(id => ({
+            id,
+            name: ingredientNames[id] || id,
+            isActive: false,
+            source: 'original'
+        }));
+
+    // Get variant starch for this meal
+    const variantStarch = [];
+
+    for (const variant of allVariants) {
+        const variantType = variant.fields['Variant Type'];
+        const applicableTo = variant.fields['Applicable to'] || '';
+        const variantIngredients = variant.fields['Ingredient'] || [];
+
+        if (!applicableTo.includes(mealType) || variantType !== 'Starch Substitution') continue;
+
+        for (const ingredientId of variantIngredients) {
+            const ingredientName = ingredientNames[ingredientId];
+            if (ingredientName) {
+                variantStarch.push({
+                    id: ingredientId,
+                    name: ingredientName,
+                    isActive: currentIngredientIds.includes(ingredientId),
+                    source: 'variant'
+                });
+            }
+        }
+    }
+
+    // Combine starch options (same deduplication logic)
+    const allStarchIds = new Set();
+    const finalStarchOptions = [];
+
+    currentStarch.forEach(starch => {
+        allStarchIds.add(starch.id);
+        finalStarchOptions.push(starch);
+    });
+
+    originalStarch.forEach(starch => {
+        if (!allStarchIds.has(starch.id)) {
+            allStarchIds.add(starch.id);
+            finalStarchOptions.push(starch);
+        }
+    });
+
+    variantStarch.forEach(starch => {
+        if (!allStarchIds.has(starch.id)) {
+            allStarchIds.add(starch.id);
+            finalStarchOptions.push(starch);
+        }
+    });
+
+    //console.log(`🍞 Final starch options: ${finalStarchOptions.length}`);
+
+    return {
+        veggieOptions: finalVeggieOptions,
+        starchOptions: finalStarchOptions  // TODO: implement starch with same logic
+    };
+};
+
 // Add CORS middleware
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
@@ -19,13 +370,14 @@ app.use((req, res, next) => {
     }
 });
 
+
 // PATCH endpoint - update customer orders with nutrition validation
 app.patch('/api/orders/:token', async (req, res) => {
     try {
         const token = req.params.token;
         const { updates } = req.body;
 
-        console.log('PATCH request received for token:', token);
+        //console.log('PATCH request received for token:', token);
 
         if (!updates || !Array.isArray(updates)) {
             return res.status(400).json({ error: 'Invalid updates format' });
@@ -61,7 +413,7 @@ app.patch('/api/orders/:token', async (req, res) => {
 
         // Update records in Airtable
         const updatedRecords = await base('Open Orders').update(airtableUpdates);
-        console.log('Successfully updated', updatedRecords.length, 'records');
+        //console.log('Successfully updated', updatedRecords.length, 'records');
 
         res.json({
             success: true,
@@ -77,6 +429,128 @@ app.patch('/api/orders/:token', async (req, res) => {
         });
     }
 });
+
+
+// Toggle veggie endpoint
+app.patch('/api/orders/:token/toggle-veggie', async (req, res) => {
+    try {
+        const token = req.params.token;
+        const { recordId, veggieId, shouldActivate } = req.body;
+
+        //console.log('🥕 Toggling veggie:', veggieId, shouldActivate ? 'ON' : 'OFF');
+
+        // Get current order record
+        const orderRecord = await base('Open Orders').find(recordId);
+        if (!orderRecord) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+
+        let currentIngredientIds = finalIngredientIds.length > 0
+            ? [...finalIngredientIds]
+            : [...originalIngredientIds];
+
+        // Toggle the veggie
+        let updatedIngredientIds;
+        if (shouldActivate) {
+            // Add veggie if not already active
+            updatedIngredientIds = currentIngredientIds.includes(veggieId)
+                ? currentIngredientIds
+                : [...currentIngredientIds, veggieId];
+        } else {
+            // Remove veggie
+            updatedIngredientIds = currentIngredientIds.filter(id => id !== veggieId);
+        }
+
+        // Update Final Ingredients
+        await base('Open Orders').update([{
+            id: recordId,
+            fields: {
+                'Final Ingredients': updatedIngredientIds
+            }
+        }]);
+
+        res.json({
+            success: true,
+            message: `Veggie ${shouldActivate ? 'added' : 'removed'}`,
+            updatedIngredientIds: updatedIngredientIds
+        });
+
+    } catch (error) {
+        console.error('❌ Error toggling veggie:', error);
+        res.status(500).json({
+            error: 'Failed to toggle veggie',
+            details: error.message
+        });
+    }
+});
+
+// Replace starch endpoint  
+app.patch('/api/orders/:token/toggle-starch', async (req, res) => {
+    try {
+        const token = req.params.token;
+        const { recordId, starchId, shouldActivate } = req.body;
+
+        //console.log('🍞 Toggling starch:', starchId, shouldActivate ? 'ON' : 'OFF');
+
+        // Get current order record
+        const orderRecord = await base('Open Orders').find(recordId);
+        if (!orderRecord) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+
+        let currentIngredientIds = finalIngredientIds.length > 0
+            ? [...finalIngredientIds]
+            : [...originalIngredientIds];
+
+        // Remove all current starch ingredients
+        const updatedIngredientIds = [];
+        for (const ingredientId of currentIngredientIds) {
+            try {
+                const ingredient = await base('Ingredients').find(ingredientId);
+                if (ingredient.fields['Component'] !== 'Starch') {
+                    updatedIngredientIds.push(ingredientId); // Keep non-starch ingredients
+                }
+            } catch (err) {
+                updatedIngredientIds.push(ingredientId); // Keep if can't check component
+            }
+        }
+
+        // Add new starch
+        updatedIngredientIds.push(newStarchId);
+
+        //console.log('🍞 Updated ingredients:', updatedIngredientIds);
+
+        // Update Final Ingredients
+        await base('Open Orders').update([{
+            id: recordId,
+            fields: {
+                'Final Ingredients': updatedIngredientIds
+            }
+        }]);
+
+        res.json({
+            success: true,
+            message: 'Starch updated successfully',
+            updatedIngredientIds: updatedIngredientIds
+        });
+
+    } catch (error) {
+        console.error('❌ Error toggling starch:', error);
+        res.status(500).json({
+            error: 'Failed to toggle starch',
+            details: error.message
+        });
+
+    }
+});
+
+
 
 // GET endpoint - get nutrition summary for a customer
 app.get('/api/nutrition/:token', async (req, res) => {
@@ -112,7 +586,7 @@ app.get('/api/orders/:token', async (req, res) => {
 
     try {
         const token = req.params.token;
-        console.log('Fetching orders for token:', token);
+        //console.log('Fetching orders for token:', token);
 
         // Step 1: Find the customer record first (with filtering to reduce data)
         const customerRecords = await base('Meal URL').select({
@@ -121,16 +595,16 @@ app.get('/api/orders/:token', async (req, res) => {
         }).all();
 
         if (!customerRecords.length) {
-            console.log('Customer not found for token:', token);
+            //console.log('Customer not found for token:', token);
             return res.status(404).json({ error: 'Customer not found' });
         }
 
         const customerRecord = customerRecords[0];
-        console.log('Found customer:', customerRecord.fields.Name);
+        //console.log('Found customer:', customerRecord.fields.Name);
 
         // Step 2: Get client nutrition profile using the identifier
         const clientIdentifier = customerRecord.fields['Client_Nutrition_Identifier'];
-        console.log('Looking for client with identifier:', clientIdentifier);
+        // console.log('Looking for client with identifier:', clientIdentifier);
 
         // Extract email from the identifier format: "Name | Meal | email@domain.com"
         const customerName = customerRecord.fields['Name'];
@@ -150,11 +624,11 @@ app.get('/api/orders/:token', async (req, res) => {
         });
 
         if (!customerEmail) {
-            console.log('Could not extract email from identifier');
+            // console.log('Could not extract email from identifier');
             return res.status(400).json({ error: 'Customer email not found in identifier' });
         }
 
-        console.log('🔍 Searching for ALL client records for email:', customerEmail);
+        // console.log('🔍 Searching for ALL client records for email:', customerEmail);
 
         const allClientRecords = await base('Client').select({
             filterByFormula: `{TypyForm_Email} = '${customerEmail}'`
@@ -207,7 +681,7 @@ app.get('/api/orders/:token', async (req, res) => {
                     protein: clientProfile.fields['goal_protein(g)'] || 0,
                     fat: clientProfile.fields['goal_fat(g)'] || 0,
                     fiber: clientProfile.fields['goal_fiber(g)'] || 0,
-                    allergies: clientProfile.fields['Allergies_Diet'] || [],
+                    // allergies: clientProfile.fields['Allergies_Diet'] || [],
                     notes: clientProfile.fields['Notes'] || '',
                     snacksPerDay: clientProfile.fields['# of snacks per day'] || 0
                 },
@@ -225,65 +699,66 @@ app.get('/api/orders/:token', async (req, res) => {
             })
         );
 
+
         const orderRecords = (await Promise.all(orderPromises)).filter(Boolean);
         console.log('Successfully loaded', orderRecords.length, 'order records');
 
-        // Step 5: Get unique allergy/diet record IDs to resolve names
-        const allergyRecordIds = new Set();
-        orderRecords.forEach(r => {
-            if (r.fields['Allergies_Diet']) {
-                r.fields['Allergies_Diet'].forEach(id => allergyRecordIds.add(id));
-            }
-        });
+        // // Step 5: Get unique allergy/diet record IDs to resolve names
+        // const allergyRecordIds = new Set();
+        // orderRecords.forEach(r => {
+        //     if (r.fields['Allergies_Diet']) {
+        //         r.fields['Allergies_Diet'].forEach(id => allergyRecordIds.add(id));
+        //     }
+        // });
 
-        // Also get from client profile
-        if (clientProfile.fields['Allergies_Diet']) {
-            clientProfile.fields['Allergies_Diet'].forEach(id => allergyRecordIds.add(id));
-        }
+        // // Also get from client profile
+        // if (clientProfile.fields['Allergies_Diet']) {
+        //     clientProfile.fields['Allergies_Diet'].forEach(id => allergyRecordIds.add(id));
+        // }
 
-        // Fetch allergy/diet names
-        const allergyNames = {};
-        if (allergyRecordIds.size > 0) {
-            try {
-                // Try different possible table names for allergies/diet restrictions
-                const possibleTableNames = ['Allergies Diet', 'Allergies_Diet', 'Diet Restrictions', 'Allergies', 'Diet'];
-                let allergyRecords = [];
+        // // Fetch allergy/diet names
+        // const allergyNames = {};
+        // if (allergyRecordIds.size > 0) {
+        //     try {
+        //         // Try different possible table names for allergies/diet restrictions
+        //         const possibleTableNames = ['Allergies Diet', 'Allergies_Diet', 'Diet Restrictions', 'Allergies', 'Diet'];
+        //         let allergyRecords = [];
 
-                for (const tableName of possibleTableNames) {
-                    try {
-                        console.log(`Trying allergy table: "${tableName}"`);
-                        const allergyPromises = Array.from(allergyRecordIds).slice(0, 3).map(id =>
-                            base(tableName).find(id).catch(err => null)
-                        );
-                        const testRecords = (await Promise.all(allergyPromises)).filter(Boolean);
-                        if (testRecords.length > 0) {
-                            console.log(`Found allergy table: "${tableName}"`);
-                            const allAllergyPromises = Array.from(allergyRecordIds).map(id =>
-                                base(tableName).find(id).catch(err => {
-                                    console.warn('Could not find allergy record:', id);
-                                    return null;
-                                })
-                            );
-                            allergyRecords = (await Promise.all(allAllergyPromises)).filter(Boolean);
-                            break;
-                        }
-                    } catch (err) {
-                        console.log(`Table "${tableName}" not found`);
-                        continue;
-                    }
-                }
+        //         for (const tableName of possibleTableNames) {
+        //             try {
+        //                 // console.log(`Trying allergy table: "${tableName}"`);
+        //                 const allergyPromises = Array.from(allergyRecordIds).slice(0, 3).map(id =>
+        //                     base(tableName).find(id).catch(err => null)
+        //                 );
+        //                 const testRecords = (await Promise.all(allergyPromises)).filter(Boolean);
+        //                 if (testRecords.length > 0) {
+        //                     // console.log(`Found allergy table: "${tableName}"`);
+        //                     const allAllergyPromises = Array.from(allergyRecordIds).map(id =>
+        //                         base(tableName).find(id).catch(err => {
+        //                             console.warn('Could not find allergy record:', id);
+        //                             return null;
+        //                         })
+        //                     );
+        //                     allergyRecords = (await Promise.all(allAllergyPromises)).filter(Boolean);
+        //                     break;
+        //                 }
+        //             } catch (err) {
+        //                 console.log(`Table "${tableName}" not found`);
+        //                 continue;
+        //             }
+        //         }
 
-                allergyRecords.forEach(record => {
-                    // The field name is 'Allergy to/ (As) Diet Type' based on the logs
-                    const allergyName = record.fields['Allergy to/ (As) Diet Type'] || 'Unknown';
-                    allergyNames[record.id] = allergyName;
-                    console.log(`Mapped allergy ${record.id} -> ${allergyName}`);
-                });
-                console.log('Resolved allergy names:', allergyNames);
-            } catch (err) {
-                console.warn('Could not fetch allergy names:', err.message);
-            }
-        }
+        //         allergyRecords.forEach(record => {
+        //             // The field name is 'Allergy to/ (As) Diet Type' based on the logs
+        //             const allergyName = record.fields['Allergy to/ (As) Diet Type'] || 'Unknown';
+        //             allergyNames[record.id] = allergyName;
+        //             console.log(`Mapped allergy ${record.id} -> ${allergyName}`);
+        //         });
+        //         console.log('Resolved allergy names:', allergyNames);
+        //     } catch (err) {
+        //         console.warn('Could not fetch allergy names:', err.message);
+        //     }
+        // }
 
         // Step 6: Format response with nutrition awareness AND INGREDIENTS
         // Step 5: Get unique ingredient record IDs to resolve names
@@ -298,130 +773,100 @@ app.get('/api/orders/:token', async (req, res) => {
             }
         });
 
-        // Step 6: Fetch ingredient names from Ingredients table
+        // Step 6: Fetch ingredient names from Ingredients table + ALL variant ingredients
         const ingredientNames = {};
-        if (ingredientRecordIds.size > 0) {
+        const ingredientComponents = {};
+
+        // First, get all variant ingredient IDs for this customer's meal types
+        const customerMealTypes = [...new Set(Object.values(orderToMealTypeMap))];
+        console.log('🔍 Customer meal types:', customerMealTypes);
+
+        const allVariantsForMeals = await getCachedVariants();
+        const variantIngredientIds = new Set();
+
+        allVariantsForMeals.forEach(variant => {
+            const applicableTo = variant.fields['Applicable to'] || '';
+            const variantType = variant.fields['Variant Type'];
+
+            // Only get variants that apply to this customer's meals
+            const appliesToCustomerMeals = customerMealTypes.some(mealType => applicableTo.includes(mealType));
+
+            if (appliesToCustomerMeals && (variantType === 'Veggie Substitution' || variantType === 'Starch Substitution')) {
+
+                const variantIngredients = variant.fields['Ingredient'] || [];
+                variantIngredients.forEach(id => variantIngredientIds.add(id));
+            }
+        });
+
+        console.log('🔍 Found', variantIngredientIds.size, 'variant ingredients to fetch');
+
+        // Combine order ingredients + variant ingredients
+        const allIngredientIdsToFetch = new Set([...ingredientRecordIds, ...variantIngredientIds]);
+
+        if (allIngredientIdsToFetch.size > 0) {
             try {
-                console.log('Fetching ingredient names for', ingredientRecordIds.size, 'ingredients');
+                console.log('Fetching ingredient names for', allIngredientIdsToFetch.size, 'ingredients (orders + variants)');
 
-                // SUPER FAST: Use Airtable's bulk select with filtering
-                const ingredientRecords = await base('Ingredients').select({
-                    filterByFormula: `OR(${Array.from(ingredientRecordIds).map(id => `RECORD_ID() = '${id}'`).join(',')})`,
-                    maxRecords: 100
-                }).all();
+                // Fetch in batches if too many
+                const ingredientIdArray = Array.from(allIngredientIdsToFetch);
+                const batchSize = 100;
 
-                ingredientRecords.forEach(record => {
-                    const ingredientName = record.fields['Ingredient Name'] ||
-                        record.fields['Name'] ||
-                        record.fields['USDA Name'] ||
-                        'Unknown Ingredient';
+                for (let i = 0; i < ingredientIdArray.length; i += batchSize) {
+                    const batch = ingredientIdArray.slice(i, i + batchSize);
 
-                    ingredientNames[record.id] = ingredientName;
-                });
+                    const ingredientRecords = await base('Ingredients').select({
+                        filterByFormula: `OR(${batch.map(id => `RECORD_ID() = '${id}'`).join(',')})`,
+                        maxRecords: batchSize
+                    }).all();
+
+                    ingredientRecords.forEach(record => {
+                        const ingredientName = record.fields['Ingredient Name'] ||
+                            record.fields['Name'] ||
+                            record.fields['USDA Name'] ||
+                            'Unknown Ingredient';
+
+                        ingredientNames[record.id] = ingredientName;
+                        ingredientComponents[record.id] = record.fields['Component'];
+                    });
+                }
 
                 console.log('Resolved ingredient names:', Object.keys(ingredientNames).length, 'ingredients');
+                console.log('🥕 Veggie variants loaded:', Object.keys(ingredientComponents).filter(id => ingredientComponents[id] === 'Veggies').length);
             } catch (err) {
                 console.warn('Could not fetch ingredient names:', err.message);
             }
         }
 
-        // Step 6.5: Get protein substitution options for each order
-        const proteinSubstitutionOptions = {};
+        //STEP pre-7: sauce and garnish
 
-        for (const orderRecord of orderRecords) {
-            const orderId = orderRecord.id;
-            const mealType = orderToMealTypeMap[orderId]; // Breakfast, Lunch, Dinner, Snack
+        const optionsCache = {};
+        const proteinOptionsCache = {};
+        // const imageCache = {};
+        console.log('🖼️ Batch fetching all images...');
+        const uniqueDishIds = [...new Set(orderRecords.map(r => r.fields['Dish ID']).filter(Boolean))];
+        console.log(`🖼️ Found ${uniqueDishIds.length} unique dish IDs`);
 
-            // Get current ingredients
-            const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-            const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
-            const currentIngredientIds = finalIngredientIds.length > 0 ? finalIngredientIds : originalIngredientIds;
+        const imageLookup = {};
+        if (uniqueDishIds.length > 0) {
+            try {
+                const imageRecords = await base('Products/ Weekly Menu').select({
+                    filterByFormula: `OR(${uniqueDishIds.map(id => `{Internal Dish ID} = ${id}`).join(',')})`,
+                    fields: ['Internal Dish ID', 'Product Title', 'Images (view only)']
+                }).all();
 
-            // Find current protein (Component = 'Meat')
-            let currentProteinIngredient = null;
-            let currentProteinId = null;
-
-            for (const ingredientId of currentIngredientIds) {
-                try {
-                    const ingredient = await base('Ingredients').find(ingredientId);
-                    if (ingredient.fields['Component'] === 'Meat') {
-                        currentProteinIngredient = {
-                            id: ingredientId,
-                            name: ingredient.fields['Ingredient Name'] || ingredient.fields['USDA Name'] || 'Unknown',
-                            component: ingredient.fields['Component']
-                        };
-                        currentProteinId = ingredientId;
-                        break;
+                imageRecords.forEach(record => {
+                    const dishId = record.fields['Internal Dish ID'];
+                    const imageField = record.fields['Images (view only)'];
+                    if (imageField && imageField[0]) {
+                        imageLookup[dishId] = imageField[0].thumbnails?.large?.url || imageField[0].url;
                     }
-                } catch (err) {
-                    continue;
-                }
+                });
+
+                console.log(`🖼️ ✅ Cached ${Object.keys(imageLookup).length} images`);
+            } catch (err) {
+                console.warn('❌ Batch image fetch failed:', err.message);
             }
-
-            let proteinOptions = [];
-
-            if (currentProteinIngredient && currentProteinId) {
-                try {
-                    // REVERSE LOOKUP: Find what variant type this protein belongs to
-                    const allVariants = await base('Variants').select({
-                        filterByFormula: `{Availability} = TRUE()`
-                    }).all();
-
-                    let relevantVariantType = null;
-
-                    // Find variant type by looking for current protein in Ingredient column
-                    for (const variant of allVariants) {
-                        const variantIngredients = variant.fields['Ingredient'] || [];
-                        if (variantIngredients.includes(currentProteinId)) {
-                            relevantVariantType = variant.fields['Variant Type'];
-                            console.log(`🥩 Found variant type for ${currentProteinIngredient.name}: ${relevantVariantType}`);
-                            break;
-                        }
-                    }
-
-                    if (relevantVariantType) {
-                        // Get all substitutions of this variant type for this meal
-                        const proteinSubstitutions = allVariants.filter(variant => {
-                            const variantType = variant.fields['Variant Type'];
-                            const applicableTo = variant.fields['Applicable to'] || '';
-                            const availability = variant.fields['Availability'];
-
-                            return variantType === relevantVariantType &&
-                                applicableTo.includes(mealType) &&
-                                availability === true;
-                        });
-
-                        console.log(`🥩 Found ${proteinSubstitutions.length} protein options for ${mealType} ${relevantVariantType}`);
-
-                        // Convert to ingredient details
-                        for (const variant of proteinSubstitutions) {
-                            const variantIngredientIds = variant.fields['Ingredient'] || [];
-                            for (const ingredientId of variantIngredientIds) {
-                                try {
-                                    const ingredient = await base('Ingredients').find(ingredientId);
-                                    proteinOptions.push({
-                                        id: ingredientId,
-                                        name: ingredient.fields['Ingredient Name'] || ingredient.fields['USDA Name'] || 'Unknown',
-                                        variantName: variant.fields['Variant Name'],
-                                        isActive: ingredientId === currentProteinId
-                                    });
-                                } catch (err) {
-                                    console.warn('Could not fetch protein ingredient:', ingredientId);
-                                }
-                            }
-                        }
-                    }
-                } catch (err) {
-                    console.warn('Error fetching protein options for order:', orderId, err.message);
-                }
-            }
-
-            proteinSubstitutionOptions[orderId] = {
-                currentProtein: currentProteinIngredient,
-                options: proteinOptions
-            };
         }
-
 
 
         // Step 7: Format response with RESOLVED INGREDIENTS
@@ -438,41 +883,95 @@ app.get('/api/orders/:token', async (req, res) => {
                 name: ingredientNames[id] || id
             }));
 
+            // NEW: Get sauce and garnish options
+            const mealType = orderToMealTypeMap[r.id] || 'Snack';
+            const cacheKey = `${mealType}-${currentIngredientIds.join(',')}`;
 
-            // NEW: Fetch image from Products/Weekly Menu
-            let imageUrl = null;
-            try {
-                console.log(`🖼️ Fetching image for: ${r.fields['Airtable ItemName']}`);
-
-                const productRecords = await base('Products/Weekly Menu').select({
-                    filterByFormula: `{Product Title} = '${r.fields['Airtable ItemName']}'`,
-                    maxRecords: 1
-                }).all();
-
-                console.log(`🖼️ Found ${productRecords.length} product records`);
-
-                if (productRecords.length > 0) {
-                    const product = productRecords[0];
-                    console.log(`🖼️ Product fields:`, Object.keys(product.fields));
-
-                    // Try different field names
-                    const imageField = product.fields['Images (view only)'] ||
-                        product.fields['Images'] ||
-                        product.fields['Image'];
-
-                    console.log(`🖼️ Image field:`, imageField);
-
-                    if (Array.isArray(imageField) && imageField.length > 0) {
-                        console.log(`🖼️ First image object:`, imageField[0]);
-                        imageUrl = imageField[0].thumbnails?.large?.url ||
-                            imageField[0].thumbnails?.small?.url ||
-                            imageField[0].url;
-                        console.log(`🖼️ Final image URL:`, imageUrl);
-                    }
-                }
-            } catch (err) {
-                console.error(`❌ Image fetch error for ${r.fields['Airtable ItemName']}:`, err);
+            let sauceAndGarnishOptions = optionsCache[cacheKey];
+            if (!sauceAndGarnishOptions) {
+                sauceAndGarnishOptions = await getSauceAndGarnishOptions(allIngredientIds, ingredientNames, ingredientComponents, currentIngredientIds, originalIngredientIds, mealType);
+                optionsCache[cacheKey] = sauceAndGarnishOptions;
             }
+
+            const currentProteinId = getCurrentProteinId(currentIngredientIds, ingredientComponents);
+            const proteinCacheKey = `${currentProteinId}-${mealType}`;
+
+            let proteinOptions = proteinOptionsCache[proteinCacheKey];
+            if (!proteinOptions && currentProteinId) {
+                proteinOptions = await getProteinOptionsForOrder(currentProteinId, mealType);
+                proteinOptionsCache[proteinCacheKey] = proteinOptions;
+            }
+
+
+            // GET IMAGE URL
+
+            // let imageUrl = imageCache[r.fields['Dish ID']];
+            // if (!imageUrl && r.fields['Dish ID']) {
+            //     try {
+            //         const dishId = r.fields['Dish ID'];
+            //         console.log(`🖼️ Fetching image for Dish ID: ${dishId}`);
+
+            //         const productRecords = await base('Products/ Weekly Menu').select({
+            //             filterByFormula: `{Internal Dish ID} = ${dishId}`,
+            //             maxRecords: 1
+            //         }).all();
+
+            //         if (productRecords.length > 0) {
+            //             const product = productRecords[0];
+            //             const imageField = product.fields['Images (view only)'];
+
+            //             if (Array.isArray(imageField) && imageField.length > 0) {
+            //                 imageUrl = imageField[0].thumbnails?.large?.url || imageField[0].url;
+            //                 imageCache[dishId] = imageUrl;
+            //                 console.log(`🖼️ ✅ Cached image for dish ${dishId}`);
+            //             }
+            //         }
+            //     } catch (err) {
+            //         console.warn(`❌ Image error for Dish ID ${r.fields['Dish ID']}:`, err.message);
+            //     }
+            // }
+            const imageUrl = imageLookup[r.fields['Dish ID']] || null;
+
+
+
+
+            // try {
+            //     const dishId = r.fields['Dish ID']; // Get the dish ID from the order
+
+            //     if (dishId) {
+            //         console.log(`🖼️ Fetching image for Dish ID: ${dishId}`);
+
+            //         const productRecords = await base('Products/Weekly Menu').select({
+            //             filterByFormula: `{Internal Dish ID} = ${dishId}`, // Match by dish ID, not name
+            //             maxRecords: 1
+            //         }).all();
+
+            //         if (productRecords.length > 0) {
+            //             const product = productRecords[0];
+            //             console.log(`🖼️ Found product: ${product.fields['Product Title']}`);
+
+            //             // Get images from the "Images (view only)" field
+            //             const imageField = product.fields['Images (view only)'] ||
+            //                 product.fields['Images'] ||
+            //                 product.fields['Product Images'];
+
+            //             if (Array.isArray(imageField) && imageField.length > 0) {
+            //                 const firstImage = imageField[0];
+            //                 imageUrl = firstImage.thumbnails?.large?.url ||
+            //                     firstImage.thumbnails?.small?.url ||
+            //                     firstImage.url;
+
+            //                 console.log(`🖼️ Found image URL: ${imageUrl}`);
+            //             } else {
+            //                 console.log(`🖼️ No images found for ${product.fields['Product Title']}`);
+            //             }
+            //         } else {
+            //             console.log(`🖼️ No product found for Dish ID: ${dishId}`);
+            //         }
+            //     }
+            // } catch (err) {
+            //     console.warn(`❌ Could not fetch image for Dish ID ${r.fields['Dish ID']}:`, err.message);
+            // }
 
 
             return {
@@ -493,6 +992,15 @@ app.get('/api/orders/:token', async (req, res) => {
                 allIngredients: allIngredients,
 
 
+                // NEW: Add sauce and garnish options
+                sauceOptions: sauceAndGarnishOptions.sauceOptions,
+                garnishOptions: sauceAndGarnishOptions.garnishOptions,
+
+                veggieOptions: sauceAndGarnishOptions.veggieOptions,
+                starchOptions: sauceAndGarnishOptions.starchOptions,
+
+
+
                 // Nutrition
                 calories: r.fields['Calories'] || 150,
                 carbs: r.fields['Carbs'] || 15,
@@ -500,10 +1008,14 @@ app.get('/api/orders/:token', async (req, res) => {
                 fat: r.fields['Fat'] || 8,
                 fiber: r.fields['Fiber'] || 3,
 
-                allergies: (r.fields['Allergies_Diet'] || []).map(id => allergyNames[id] || id).filter(Boolean),
+                // allergies: (r.fields['Allergies_Diet'] || []).map(id => allergyNames[id] || id).filter(Boolean),
+
+
+                proteinOptions: proteinOptions || { options: [], currentProtein: null },
+                imageUrl: imageUrl
 
                 // ✅ Add image
-                imageUrl
+                //imageUrl
             };
         }));
 
@@ -516,7 +1028,7 @@ app.get('/api/orders/:token', async (req, res) => {
             fat: clientProfile.fields['goal_fat(g)'] || 0,
             fiber: clientProfile.fields['goal_fiber(g)'] || 0,
             // Resolve client allergies to readable names
-            allergies: (clientProfile.fields['Allergies_Diet'] || []).map(id => allergyNames[id] || id).filter(Boolean),
+            // allergies: (clientProfile.fields['Allergies_Diet'] || []).map(id => allergyNames[id] || id).filter(Boolean),
             notes: clientProfile.fields['Notes'] || '',
             snacksPerDay: clientProfile.fields['# of snacks per day'] || 0
         };
@@ -538,14 +1050,19 @@ app.get('/api/orders/:token', async (req, res) => {
             nutritionGoals: clientGoals,
             currentTotals: currentTotals,
             orders: orders,
-            proteinSubstitutionOptions: proteinSubstitutionOptions,
             summary: {
                 totalMeals: orders.length,
                 calorieProgress: clientGoals.calories > 0 ? (currentTotals.calories / clientGoals.calories * 100).toFixed(1) : 0
             }
         };
 
-        console.log('Returning optimized response with', orders.length, 'orders and ingredients');
+        // console.log('🔍 Customer meal types:', customerMealTypes);
+        // console.log('🔍 Total variants:', allVariantsForMeals.length);
+        // console.log('🔍 Variant ingredient IDs to fetch:', variantIngredientIds.size);
+        // console.log('🔍 Combined with order ingredients:', allIngredientIdsToFetch.size);
+
+
+        // console.log('Returning optimized response with', orders.length, 'orders and ingredients');
         res.json(response);
     } catch (error) {
         console.error('Error fetching orders:', error);
@@ -863,7 +1380,125 @@ app.patch('/api/orders/:token/quantity', async (req, res) => {
     }
 });
 
+// Replace sauce endpoint
+app.patch('/api/orders/:token/replace-sauce', async (req, res) => {
+    try {
+        const token = req.params.token;
+        const { recordId, newSauceId, oldSauceId } = req.body;
 
+        console.log('🍶 Replacing sauce:', oldSauceId, '->', newSauceId);
+
+        // Get current order record
+        const orderRecord = await base('Open Orders').find(recordId);
+        if (!orderRecord) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+
+        let currentIngredientIds = finalIngredientIds.length > 0
+            ? [...finalIngredientIds]
+            : [...originalIngredientIds];
+
+        // Remove all current sauce ingredients
+        const updatedIngredientIds = [];
+        for (const ingredientId of currentIngredientIds) {
+            try {
+                const ingredient = await base('Ingredients').find(ingredientId);
+                if (ingredient.fields['Component'] !== 'Sauce') {
+                    updatedIngredientIds.push(ingredientId); // Keep non-sauce ingredients
+                }
+            } catch (err) {
+                updatedIngredientIds.push(ingredientId); // Keep if can't check component
+            }
+        }
+
+        // Add new sauce if not "No Sauce"
+        if (newSauceId) {
+            updatedIngredientIds.push(newSauceId);
+        }
+
+        console.log('🍶 Updated ingredients:', updatedIngredientIds);
+
+        // Update Final Ingredients
+        await base('Open Orders').update([{
+            id: recordId,
+            fields: {
+                'Final Ingredients': updatedIngredientIds
+            }
+        }]);
+
+        res.json({
+            success: true,
+            message: 'Sauce updated successfully',
+            updatedIngredientIds: updatedIngredientIds
+        });
+
+    } catch (error) {
+        console.error('❌ Error replacing sauce:', error);
+        res.status(500).json({
+            error: 'Failed to replace sauce',
+            details: error.message
+        });
+    }
+});
+
+// Toggle garnish endpoint (same as ingredient toggle but filtered)
+app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
+    try {
+        const token = req.params.token;
+        const { recordId, garnishId, shouldActivate } = req.body;
+
+        console.log('🌿 Toggling garnish:', garnishId, shouldActivate ? 'ON' : 'OFF');
+
+        // Get current order record
+        const orderRecord = await base('Open Orders').find(recordId);
+        if (!orderRecord) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+
+        let currentIngredientIds = finalIngredientIds.length > 0
+            ? [...finalIngredientIds]
+            : [...originalIngredientIds];
+
+        // Toggle the garnish
+        let updatedIngredientIds;
+        if (shouldActivate) {
+            // Add garnish if not already active
+            updatedIngredientIds = currentIngredientIds.includes(garnishId)
+                ? currentIngredientIds
+                : [...currentIngredientIds, garnishId];
+        } else {
+            // Remove garnish
+            updatedIngredientIds = currentIngredientIds.filter(id => id !== garnishId);
+        }
+
+        // Update Final Ingredients
+        await base('Open Orders').update([{
+            id: recordId,
+            fields: {
+                'Final Ingredients': updatedIngredientIds
+            }
+        }]);
+
+        res.json({
+            success: true,
+            message: `Garnish ${shouldActivate ? 'added' : 'removed'}`,
+            updatedIngredientIds: updatedIngredientIds
+        });
+
+    } catch (error) {
+        console.error('❌ Error toggling garnish:', error);
+        res.status(500).json({
+            error: 'Failed to toggle garnish',
+            details: error.message
+        });
+    }
+});
 
 
 const PORT = process.env.PORT || 3001;
