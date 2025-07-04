@@ -1,0 +1,24 @@
+Nutrition-aware server running on port 3001
+Customer details: {
+  name: 'Abhishek Gupta',
+  email: 'agabhishek492@gmail.com',
+  identifier: 'Abhishek Gupta | Snack | agabhishek492@gmail.com'
+}
+🔍 Found 4 client records for this customer:
+   1. Meal: Lunch, Identifier: Abhishek Gupta | Lunch | agabhishek492@gmail.com
+   2. Meal: Snack, Identifier: Abhishek Gupta | Snack | agabhishek492@gmail.com
+   3. Meal: Breakfast, Identifier: Abhishek Gupta | Breakfast | agabhishek492@gmail.com
+   4. Meal: Dinner, Identifier: Abhishek Gupta | Dinner | agabhishek492@gmail.com
+Using client profile for: Abhishek Gupta - Meal: Lunch
+Total unique orders across all meal types: 15
+Successfully loaded 15 order records
+🔍 Customer meal types: [ 'Lunch', 'Snack', 'Breakfast', 'Dinner' ]
+📦 Caching all variants...
+📦 Cached 36 variants
+🔍 Found 11 variant ingredients to fetch
+Fetching ingredient names for 84 ingredients (orders + variants)
+Resolved ingredient names: 84 ingredients
+🥕 Veggie variants loaded: 33
+🖼️ Batch fetching all images...
+🖼️ Found 11 unique dish IDs
+🖼️ ✅ Cached 11 images
