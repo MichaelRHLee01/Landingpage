@@ -65,7 +65,7 @@ const getSauceAndGarnishOptions = async (allIngredientIds, ingredientNames, ingr
         .map(id => ({
             id,
             name: ingredientNames[id] || id,
-            isActive: currentIngredientIds.includes(id) // Only active if in current
+            isActive: Boolean(currentIngredientIds.includes(id)) // Only active if in current
         }));
 
     // Get cached standard sauces
@@ -74,7 +74,7 @@ const getSauceAndGarnishOptions = async (allIngredientIds, ingredientNames, ingr
     // Mark any standard sauces that are currently active
     const allSauceOptions = standardSauces.map(standardSauce => ({
         ...standardSauce,
-        isActive: currentSauceIngredients.some(current => current.id === standardSauce.id)
+        isActive: Boolean(currentSauceIngredients.some(current => current.id === standardSauce.id))
     }));
 
     // Add original sauces that aren't in the standard list
@@ -107,7 +107,7 @@ const getSauceAndGarnishOptions = async (allIngredientIds, ingredientNames, ingr
             return {
                 id,
                 name: ingredientNames[id] || id,
-                isActive: isActive
+                isActive: Boolean(isActive)
             };
         });
 
@@ -199,7 +199,7 @@ const getProteinOptionsForOrder = async (currentProteinId, mealType) => {
                         id: ingredientId,
                         name: ingredient.fields['Ingredient Name'] || ingredient.fields['USDA Name'] || 'Unknown',
                         variantName: variant.fields['Variant Name'],
-                        isActive: ingredientId === currentProteinId
+                        isActive: Boolean(ingredientId === currentProteinId)
                     });
                 } catch (err) {
                     console.warn('Could not fetch protein ingredient:', ingredientId);
@@ -258,7 +258,7 @@ const getVeggieStarchOptions = async (allIngredientIds, ingredientNames, ingredi
                 variantVeggies.push({
                     id: ingredientId,
                     name: ingredientName,
-                    isActive: currentIngredientIds.includes(ingredientId),
+                    isActive: Boolean(currentIngredientIds.includes(ingredientId)),
                     source: 'variant'
                 });
             }
@@ -331,7 +331,7 @@ const getVeggieStarchOptions = async (allIngredientIds, ingredientNames, ingredi
                 variantStarch.push({
                     id: ingredientId,
                     name: ingredientName,
-                    isActive: currentIngredientIds.includes(ingredientId),
+                    isActive: Boolean(currentIngredientIds.includes(ingredientId)),
                     source: 'variant'
                 });
             }
