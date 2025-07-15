@@ -199,7 +199,10 @@ const getProteinOptionsForOrder = async (currentProteinId, mealType) => {
                         id: ingredientId,
                         name: ingredient.fields['Ingredient Name'] || ingredient.fields['USDA Name'] || 'Unknown',
                         variantName: variant.fields['Variant Name'],
-                        isActive: Boolean(ingredientId === currentProteinId)
+                        isActive: Boolean(ingredientId === currentProteinId),
+                        displayName: ingredient.fields['Ingredient Name'] === 'Egg'
+                            ? `${ingredient.fields['Ingredient Name']} ${variant.fields['Variant Name']}`
+                            : ingredient.fields['Ingredient Name']
                     });
                 } catch (err) {
                     console.warn('Could not fetch protein ingredient:', ingredientId);
