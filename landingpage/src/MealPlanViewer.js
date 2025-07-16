@@ -63,17 +63,6 @@ export default function MealPlanViewer() {
         transition: 'all 0.2s ease'
     });
 
-
-    const calculateCurrentTotals = () => {
-        return orders.reduce((totals, order) => ({
-            calories: totals.calories + (order.calories * order.quantity),
-            carbs: totals.carbs + (order.carbs * order.quantity),
-            protein: totals.protein + (order.protein * order.quantity),
-            fat: totals.fat + (order.fat * order.quantity),
-            fiber: totals.fiber + (order.fiber * order.quantity)
-        }), { calories: 0, carbs: 0, protein: 0, fat: 0, fiber: 0 });
-    };
-
     const openModal = (meal, actualIndex) => {
         setSelectedMeal({ ...meal, actualIndex });
         setShowModal(true);
@@ -219,7 +208,6 @@ export default function MealPlanViewer() {
             setSaving(false);
         }
     };
-
     const CompactMealCard = ({ meal, actualIndex }) => (
         <div
             onClick={() => openModal(meal, actualIndex)}
@@ -233,8 +221,8 @@ export default function MealPlanViewer() {
                 minHeight: '180px',
                 display: 'flex',
                 flexDirection: 'column',
-                width: '280px',        // ← Fixed width (larger than 200px)
-                flexShrink: 0          // ← Prevents shrinking
+                width: '280px',
+                flexShrink: 0
             }}
             onMouseEnter={(e) => e.target.style.backgroundColor = '#f0f0f0'}
             onMouseLeave={(e) => e.target.style.backgroundColor = '#fafafa'}
@@ -251,29 +239,79 @@ export default function MealPlanViewer() {
                 }} />
             )}
 
-            <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>
-                    {meal.itemName}
-                    {meal.hasCustomIngredients && (
-                        <span style={{
-                            marginLeft: '4px',
-                            fontSize: '10px',
-                            backgroundColor: '#f39c12',
-                            color: 'white',
-                            padding: '1px 4px',
-                            borderRadius: '2px'
-                        }}>
-                            CUSTOMIZED
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                {/* Title and quantity controls */}
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: '8px'
+                }}>
+                    <div style={{ fontSize: '12px', fontWeight: 'bold', flex: 1 }}>
+                        {meal.itemName}
+                    </div>
+
+                    {/* Quantity controls */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuantityChange(actualIndex, Math.max(0, meal.quantity - 1));
+                            }}
+                            disabled={saving || meal.quantity <= 0}
+                            style={{
+                                width: '20px',
+                                height: '20px',
+                                border: '1px solid #ccc',
+                                borderRadius: '3px',
+                                backgroundColor: '#f8f9fa',
+                                cursor: (saving || meal.quantity <= 0) ? 'not-allowed' : 'pointer',
+                                fontSize: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            −
+                        </button>
+                        <span style={{ fontSize: '10px', color: '#666', minWidth: '15px', textAlign: 'center' }}>
+                            {meal.quantity}
                         </span>
-                    )}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuantityChange(actualIndex, meal.quantity + 1);
+                            }}
+                            disabled={saving}
+                            style={{
+                                width: '20px',
+                                height: '20px',
+                                border: '1px solid #ccc',
+                                borderRadius: '3px',
+                                backgroundColor: '#f8f9fa',
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                fontSize: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            +
+                        </button>
+                    </div>
                 </div>
 
-                <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
-                    {meal.quantity} serving{meal.quantity !== 1 ? 's' : ''}
-                </div>
-
-                <div style={{ fontSize: '10px', color: '#666' }}>
-                    {meal.calories}cal • {meal.protein}g protein • {meal.carbs}g carbs
+                {/* Ingredient list at bottom */}
+                <div style={{
+                    fontSize: '10px',
+                    color: '#666',
+                    marginTop: 'auto',
+                    lineHeight: '1.2'
+                }}>
+                    {meal.ingredients && meal.ingredients.length > 0
+                        ? meal.ingredients.join(', ')
+                        : 'No ingredients listed'
+                    }
                 </div>
             </div>
         </div>
@@ -440,7 +478,10 @@ export default function MealPlanViewer() {
                             <ProteinSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
                             <VeggieSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
                             <StarchSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
-                            <SauceSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+                            {meal.meal !== 'Snack' && (
+                                <SauceSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+                            )}
+                            {/* <SauceSubstitutionSection order={meal} orderIndex={meal.actualIndex} /> */}
                             <GarnishSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
 
                             {/* Ingredients section */}
@@ -563,18 +604,6 @@ export default function MealPlanViewer() {
         );
     };
 
-    const getNutritionProgress = (current, goal) => {
-        if (!goal) return 0;
-        return Math.min((current / goal) * 100, 100);
-    };
-
-    const getProgressColor = (current, goal) => {
-        const percentage = (current / goal) * 100;
-        if (percentage < 80) return '#f39c12'; // Orange - under target
-        if (percentage > 110) return '#e74c3c'; // Red - over target
-        return '#27ae60'; // Green - good range
-    };
-
     const handleSauceSubstitution = async (orderIndex, newSauceId, oldSauceId) => {
         const order = orders[orderIndex];
 
@@ -688,44 +717,6 @@ export default function MealPlanViewer() {
             setSaving(false);
         }
     };
-
-    // const handleToggleStarch = async (orderIndex, starchId, isCurrentlyActive) => {
-    //     const order = orders[orderIndex];
-
-    //     try {
-    //         setSaving(true);
-
-    //         const response = await axios.patch(`/orders/${token}/toggle-starch`, {
-    //             recordId: order.recordId,
-    //             starchId: starchId,
-    //             shouldActivate: !isCurrentlyActive
-    //         });
-
-    //         // Update local state immediately
-    //         const updatedOrders = [...orders];
-    //         updatedOrders[orderIndex] = {
-    //             ...updatedOrders[orderIndex],
-    //             finalIngredients: response.data.updatedIngredientIds,
-    //             hasCustomIngredients: response.data.updatedIngredientIds.length > 0,
-    //             starchOptions: updatedOrders[orderIndex].starchOptions.map(starch => ({
-    //                 ...starch,
-    //                 isActive: starch.id === starchId ? !isCurrentlyActive : starch.isActive
-    //             }))
-    //         };
-    //         setOrders(updatedOrders);
-
-    //         setSuccessMessage(
-    //             isCurrentlyActive ? 'Starch removed' : 'Starch added'
-    //         );
-    //         setTimeout(() => setSuccessMessage(''), 2000);
-
-    //     } catch (err) {
-    //         setError(err.response?.data?.error || 'Failed to toggle starch');
-    //         console.error('Error toggling starch:', err);
-    //     } finally {
-    //         setSaving(false);
-    //     }
-    // };
 
     const handleStarchSubstitution = async (orderIndex, newStarchId, oldStarchId) => {
         const order = orders[orderIndex];
@@ -1095,8 +1086,8 @@ export default function MealPlanViewer() {
         );
     }
 
-    const currentTotals = calculateCurrentTotals();
-    const goals = mealPlanData.nutritionGoals;
+    // const currentTotals = calculateCurrentTotals();
+    // const goals = mealPlanData.nutritionGoals;
     const customer = mealPlanData.customer;
 
     return (
@@ -1224,43 +1215,6 @@ export default function MealPlanViewer() {
                                         </div>
                                     )}
                                 </div>
-
-                                {/* <div style={{
-                                    display: 'flex',
-                                    overflowX: 'auto',
-                                    gap: '15px',
-                                    paddingBottom: '10px'
-                                }}>
-                                    {mealOrders.map((order, index) => {
-                                        const actualIndex = orders.indexOf(order);
-                                        return (
-                                            <CompactMealCard
-                                                key={order.recordId || actualIndex}
-                                                meal={order}
-                                                actualIndex={actualIndex}
-                                            />
-                                        );
-                                    })}
-                                    {mealOrders.length > 3 && (
-                                        <div style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            border: '1px dashed #ccc',
-                                            borderRadius: '8px',
-                                            minHeight: '180px',
-                                            width: '80px',
-                                            flexShrink: 0,
-                                            cursor: 'pointer',
-                                            backgroundColor: '#f9f9f9',
-                                            color: '#666',
-                                            fontSize: '24px'
-                                        }}>
-                                            →
-                                        </div>
-                                    )}
-                                </div> */}
-
                             </div>
                         );
                     })}
@@ -1274,9 +1228,7 @@ export default function MealPlanViewer() {
                     onClose={closeModal}
                 />
             )
-                /* {showModal && selectedMeal && (
-                    <MealModal meal={selectedMeal} onClose={closeModal} />
-                )} */
+
             }
         </div>
     )
