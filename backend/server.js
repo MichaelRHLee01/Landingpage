@@ -1,7 +1,3 @@
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '.env') });
-console.log('[DEBUG server.js] Token:', process.env.AIRTABLE_KEY);
-
 const express = require('express');
 const { base } = require('./airtable');
 const { sendWeeklyEmails } = require('./emailer');
@@ -10,7 +6,7 @@ const app = express();
 app.use(express.json());
 
 let CACHED_STANDARD_SAUCES = null;
-let CACHED_INGREDIENT_COMPONENTS = {};
+let CACHED_INGREDIENT_COMPONENTS = {}; // added this
 
 // Helper function to get ingredient name from ID
 const getIngredientName = async (ingredientId) => {
@@ -422,8 +418,8 @@ app.patch('/api/orders/:token', async (req, res) => {
         }
 
         // Verify customer exists
-        const customerRecords = await base('Meal URL').select({
-            filterByFormula: `{Unique ID} = '${token}'`,
+        const customerRecords = await base('Open Orders').select({
+            filterByFormula: `ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}'`,
             maxRecords: 1
         }).all();
 
@@ -647,7 +643,7 @@ app.get('/api/orders/:token', async (req, res) => {
         //console.log('Fetching orders for token:', token);
 
         // Step 1: Find the customer record first (with filtering to reduce data)
-        const customerRecords = await base('Meal URL').select({
+        const customerRecords = await base('Client').select({
             filterByFormula: `{Unique ID} = '${token}'`,
             maxRecords: 1
         }).all();
@@ -658,22 +654,14 @@ app.get('/api/orders/:token', async (req, res) => {
         }
 
         const customerRecord = customerRecords[0];
-        //console.log('Found customer:', customerRecord.fields.Name);
+        console.log('Found customer:', customerRecord.fields.First_Name, customerRecord.fields.Last_Name);
 
         // Step 2: Get client nutrition profile using the identifier
-        const clientIdentifier = customerRecord.fields['Client_Nutrition_Identifier'];
-        // console.log('Looking for client with identifier:', clientIdentifier);
+        const clientIdentifier = customerRecord.fields['identifier'];
 
         // Extract email from the identifier format: "Name | Meal | email@domain.com"
-        const customerName = customerRecord.fields['Name'];
-        let customerEmail = null;
-
-        if (clientIdentifier && clientIdentifier.includes('|')) {
-            const parts = clientIdentifier.split('|').map(part => part.trim());
-            if (parts.length >= 3) {
-                customerEmail = parts[2]; // Email is the third part
-            }
-        }
+        const customerName = customerRecord.fields['First_Name'] + ' ' + customerRecord.fields['Last_Name'];
+        const customerEmail = customerRecord.fields['TypyForm_Email'];
 
         console.log('Customer details:', {
             name: customerName,
@@ -681,15 +669,10 @@ app.get('/api/orders/:token', async (req, res) => {
             identifier: clientIdentifier
         });
 
-        if (!customerEmail) {
-            // console.log('Could not extract email from identifier');
-            return res.status(400).json({ error: 'Customer email not found in identifier' });
-        }
-
         // console.log('🔍 Searching for ALL client records for email:', customerEmail);
 
         const allClientRecords = await base('Client').select({
-            filterByFormula: `{TypyForm_Email} = '${customerEmail}'`
+            filterByFormula: `{Unique ID} = '${token}'`
         }).all();
 
         console.log('🔍 Found', allClientRecords.length, 'client records for this customer:');
@@ -710,24 +693,14 @@ app.get('/api/orders/:token', async (req, res) => {
         console.log('Using client profile for:', clientProfile.fields['First_Name'], clientProfile.fields['Last_Name'], '- Meal:', clientProfile.fields['Meal']);
 
         // Step 3: Get orders from ALL client records (combine all meal types)
-        const allOrderRecordIds = [];
-        const orderToMealTypeMap = {}; // Track which meal type each order belongs to
+        const orderRecords = await base('Open Orders').select({
+            filterByFormula: `ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}'`,
+        }).all();
 
-        allClientRecords.forEach(clientRecord => {
-            const orderIds = clientRecord.fields['Open Orders'] || [];
-            const mealType = clientRecord.fields['Meal']; // Breakfast, Lunch, Dinner, Snack
+        const orderToMealTypeMap = {}
 
-            orderIds.forEach(orderId => {
-                allOrderRecordIds.push(orderId);
-                orderToMealTypeMap[orderId] = mealType; // Map order ID to meal type
-            });
-        });
 
-        // Remove duplicates but keep the meal type mapping
-        const uniqueOrderIds = [...new Set(allOrderRecordIds)];
-        console.log('Total unique orders across all meal types:', uniqueOrderIds.length);
-
-        if (!uniqueOrderIds.length) {
+        if (!orderRecords.length) {
             return res.json({
                 customer: {
                     name: customerRecord.fields.Name,
@@ -749,16 +722,6 @@ app.get('/api/orders/:token', async (req, res) => {
             });
         }
 
-        // Step 4: Fetch only the specific order records we need
-        const orderPromises = uniqueOrderIds.map(recordId =>
-            base('Open Orders').find(recordId).catch(err => {
-                console.warn('Could not find order:', recordId, err.message);
-                return null;
-            })
-        );
-
-
-        const orderRecords = (await Promise.all(orderPromises)).filter(Boolean);
         console.log('Successfully loaded', orderRecords.length, 'order records');
 
         // Step 6: Format response with nutrition awareness AND INGREDIENTS
@@ -772,6 +735,7 @@ app.get('/api/orders/:token', async (req, res) => {
             if (r.fields['Original Ingredients']) {
                 r.fields['Original Ingredients'].forEach(id => ingredientRecordIds.add(id));
             }
+            orderToMealTypeMap[r.fields['#']] = r.fields['Meal Portion'];
         });
 
         // Step 6: Fetch ingredient names from Ingredients table + ALL variant ingredients
@@ -1017,7 +981,7 @@ app.patch('/api/orders/:token/replace-protein', async (req, res) => {
         console.log('🥩 Replacing protein:', oldProteinId, '->', newProteinId);
 
         // Verify customer exists
-        const customerRecords = await base('Meal URL').select({
+        const customerRecords = await base('Client').select({
             filterByFormula: `{Unique ID} = '${token}'`,
             maxRecords: 1
         }).all();
@@ -1087,7 +1051,7 @@ app.patch('/api/orders/:token/ingredients/toggle', async (req, res) => {
         console.log('🔄 Toggling ingredient:', ingredientName, shouldActivate ? 'ON' : 'OFF');
 
         // Verify customer exists
-        const customerRecords = await base('Meal URL').select({
+        const customerRecords = await base('Client').select({
             filterByFormula: `{Unique ID} = '${token}'`,
             maxRecords: 1
         }).all();
@@ -1182,7 +1146,7 @@ app.patch('/api/orders/:token/ingredients', async (req, res) => {
         console.log('Deleting ingredient:', ingredientToDelete, 'from order:', recordId);
 
         // Verify customer exists
-        const customerRecords = await base('Meal URL').select({
+        const customerRecords = await base('Client').select({
             filterByFormula: `{Unique ID} = '${token}'`,
             maxRecords: 1
         }).all();
@@ -1280,7 +1244,7 @@ app.patch('/api/orders/:token/quantity', async (req, res) => {
         console.log('🔄 Updating quantity for:', itemName, 'to', newQuantity);
 
         // Verify customer exists
-        const customerRecords = await base('Meal URL').select({
+        const customerRecords = await base('Client').select({
             filterByFormula: `{Unique ID} = '${token}'`,
             maxRecords: 1
         }).all();
