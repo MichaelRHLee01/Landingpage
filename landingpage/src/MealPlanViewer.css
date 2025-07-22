@@ -74,3 +74,21 @@
         white-space: nowrap;
     }
 }
+
+/* Fix modal button overlap */
+.meal-modal button[style*="position: absolute"] {
+    background: rgba(0, 0, 0, 0.8) !important;
+    color: white !important;
+    border-radius: 50% !important;
+    width: 35px !important;
+    height: 35px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999 !important;
+}
+
+/* Give quantity controls more space */
+.meal-modal-details>div:first-child>div:last-child {
+    margin-right: 50px !important;
+}
