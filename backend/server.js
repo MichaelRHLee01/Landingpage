@@ -1,3 +1,7 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+console.log('[DEBUG server.js] Token:', process.env.AIRTABLE_KEY);
+
 const express = require('express');
 const { base } = require('./airtable');
 const { sendWeeklyEmails } = require('./emailer');
@@ -6,6 +10,7 @@ const app = express();
 app.use(express.json());
 
 let CACHED_STANDARD_SAUCES = null;
+let CACHED_INGREDIENT_COMPONENTS = {};
 
 // Helper function to get ingredient name from ID
 const getIngredientName = async (ingredientId) => {
@@ -45,6 +50,23 @@ const getStandardSauces = async () => {
         return [{ id: null, name: 'No Sauce', isActive: false }];
     }
 };
+
+// To decrease latency for sauces and starches
+const cacheIngredientComponents = async (ingredientIds) => {
+    const uncachedIds = ingredientIds.filter(id => !CACHED_INGREDIENT_COMPONENTS[id]);
+
+    if (uncachedIds.length > 0) {
+        const ingredientRecords = await base('Ingredients').select({
+            filterByFormula: `OR(${uncachedIds.map(id => `RECORD_ID() = '${id}'`).join(',')})`,
+            fields: ['Component']
+        }).all();
+
+        ingredientRecords.forEach(record => {
+            CACHED_INGREDIENT_COMPONENTS[record.id] = record.fields['Component'];
+        });
+    }
+};
+
 
 const getSauceAndGarnishOptions = async (allIngredientIds, ingredientNames, ingredientComponents, currentIngredientIds, originalIngredientIds, mealType) => {
 
@@ -531,17 +553,25 @@ app.patch('/api/orders/:token/toggle-starch', async (req, res) => {
             : [...originalIngredientIds];
 
         // Remove all current starch ingredients
-        const updatedIngredientIds = [];
-        for (const ingredientId of currentIngredientIds) {
-            try {
-                const ingredient = await base('Ingredients').find(ingredientId);
-                if (ingredient.fields['Component'] !== 'Starch') {
-                    updatedIngredientIds.push(ingredientId); // Keep non-starch ingredients
-                }
-            } catch (err) {
-                updatedIngredientIds.push(ingredientId); // Keep if can't check component
-            }
-        }
+        // const updatedIngredientIds = [];
+        // for (const ingredientId of currentIngredientIds) {
+        //     try {
+        //         const ingredient = await base('Ingredients').find(ingredientId);
+        //         if (ingredient.fields['Component'] !== 'Starch') {
+        //             updatedIngredientIds.push(ingredientId); // Keep non-starch ingredients
+        //         }
+        //     } catch (err) {
+        //         updatedIngredientIds.push(ingredientId); // Keep if can't check component
+        //     }
+        // }
+        // Cache components for all ingredients first
+        await cacheIngredientComponents(currentIngredientIds);
+
+        // Now filter without API calls
+        const updatedIngredientIds = currentIngredientIds.filter(id =>
+            CACHED_INGREDIENT_COMPONENTS[id] !== 'Starch'
+        );
+
 
         // Add new starch
         updatedIngredientIds.push(starchId);
@@ -1316,18 +1346,27 @@ app.patch('/api/orders/:token/replace-sauce', async (req, res) => {
             ? [...finalIngredientIds]
             : [...originalIngredientIds];
 
-        // Remove all current sauce ingredients
-        const updatedIngredientIds = [];
-        for (const ingredientId of currentIngredientIds) {
-            try {
-                const ingredient = await base('Ingredients').find(ingredientId);
-                if (ingredient.fields['Component'] !== 'Sauce') {
-                    updatedIngredientIds.push(ingredientId); // Keep non-sauce ingredients
-                }
-            } catch (err) {
-                updatedIngredientIds.push(ingredientId); // Keep if can't check component
-            }
-        }
+        // // Remove all current sauce ingredients
+        // const updatedIngredientIds = [];
+        // for (const ingredientId of currentIngredientIds) {
+        //     try {
+        //         const ingredient = await base('Ingredients').find(ingredientId);
+        //         if (ingredient.fields['Component'] !== 'Sauce') {
+        //             updatedIngredientIds.push(ingredientId); // Keep non-sauce ingredients
+        //         }
+        //     } catch (err) {
+        //         updatedIngredientIds.push(ingredientId); // Keep if can't check component
+        //     }
+        // }
+
+        // Cache components for all ingredients first
+        await cacheIngredientComponents(currentIngredientIds);
+
+        // Now filter without API calls
+        const updatedIngredientIds = currentIngredientIds.filter(id =>
+            CACHED_INGREDIENT_COMPONENTS[id] !== 'Sauce'
+        );
+
 
         // Add new sauce if not "No Sauce"
         if (newSauceId) {

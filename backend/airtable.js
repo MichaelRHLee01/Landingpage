@@ -1,3 +1,8 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+console.log('[DEBUG airtable.js] Token:', process.env.AIRTABLE_KEY);
+
+
 const Airtable = require('airtable');
 require('dotenv').config();
 const base = new Airtable({ apiKey: process.env.AIRTABLE_KEY }).base(process.env.AIRTABLE_BASE_ID);
