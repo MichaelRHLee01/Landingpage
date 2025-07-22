@@ -1,6 +1,8 @@
 import { useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import axios from './api';
+import './MealPlanViewer.css';
+
 
 export default function MealPlanViewer() {
     const [params] = useSearchParams();
@@ -334,6 +336,7 @@ export default function MealPlanViewer() {
             onClick={onClose}
         >
             <div
+                className='meal-modal'
                 style={{
                     backgroundColor: 'white',
                     borderRadius: '8px',
@@ -365,16 +368,20 @@ export default function MealPlanViewer() {
                 <div style={{ padding: '20px' }}>
                     {/* Put ALL your existing meal detail content here */}
                     {/* This is where your current meal card content goes */}
-                    <div style={{
-                        display: 'flex',
-                        gap: '20px',
-                        alignItems: 'flex-start'
-                    }}>
-                        {/* Image section */}
-                        <div style={{
-                            flex: '0 0 300px',
-                            minHeight: '200px'
+                    <div
+                        className="meal-modal-content"
+                        style={{
+                            display: 'flex',
+                            gap: '20px',
+                            alignItems: 'flex-start'
                         }}>
+                        {/* Image section */}
+                        <div
+                            className="meal-modal-image"
+                            style={{
+                                flex: '0 0 300px',
+                                minHeight: '200px'
+                            }}>
                             {meal.imageUrl && (
                                 <img
                                     src={meal.imageUrl}
@@ -390,12 +397,14 @@ export default function MealPlanViewer() {
                         </div>
 
                         {/* Details section - copy your existing content here */}
-                        <div style={{
-                            flex: '1',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '15px'
-                        }}>
+                        <div
+                            className="meal-modal-details"
+                            style={{
+                                flex: '1',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '15px'
+                            }}>
                             {/* Title and quantity controls */}
                             <div style={{
                                 display: 'flex',
@@ -496,16 +505,19 @@ export default function MealPlanViewer() {
                                     }}>
                                         Ingredients (click to add/remove):
                                     </label>
-                                    <div style={{
-                                        display: 'flex',
-                                        flexWrap: 'wrap',
-                                        gap: '8px'
-                                    }}>
+                                    <div
+                                        className="ingredient-buttons"
+                                        style={{
+                                            display: 'flex',
+                                            flexWrap: 'wrap',
+                                            gap: '8px'
+                                        }}>
                                         {meal.allIngredients.map((ingredient, ingredientIndex) => {
                                             const isActive = meal.ingredients.includes(ingredient.name);
                                             return (
                                                 <button
                                                     key={ingredientIndex}
+                                                    className="ingredient-button"
                                                     onClick={() => handleToggleIngredient(meal.actualIndex, ingredient.name, isActive)}
                                                     disabled={saving}
                                                     style={getIngredientButtonStyle(isActive, saving)}
@@ -530,6 +542,239 @@ export default function MealPlanViewer() {
             </div>
         </div >
     );
+
+    // // Replace your MealModal component with this version:
+    // const MealModal = ({ meal, onClose }) => {
+    //     const isMobile = window.innerWidth <= 768;
+
+    //     return (
+    //         <div
+    //             style={{
+    //                 position: 'fixed',
+    //                 top: 0,
+    //                 left: 0,
+    //                 right: 0,
+    //                 bottom: 0,
+    //                 backgroundColor: 'rgba(0,0,0,0.5)',
+    //                 display: 'flex',
+    //                 alignItems: 'center',
+    //                 justifyContent: 'center',
+    //                 zIndex: 1000
+    //             }}
+    //             onClick={onClose}
+    //         >
+    //             <div
+    //                 style={{
+    //                     backgroundColor: 'white',
+    //                     borderRadius: '8px',
+    //                     // Mobile-responsive sizing
+    //                     maxWidth: isMobile ? 'calc(100vw - 20px)' : '800px',
+    //                     width: isMobile ? 'calc(100vw - 20px)' : 'auto',
+    //                     maxHeight: '90vh',
+    //                     overflow: 'auto',
+    //                     margin: isMobile ? '10px' : '20px',
+    //                     position: 'relative'
+    //                 }}
+    //                 onClick={(e) => e.stopPropagation()}
+    //             >
+    //                 <button
+    //                     onClick={onClose}
+    //                     style={{
+    //                         position: 'absolute',
+    //                         top: '15px',
+    //                         right: '15px',
+    //                         background: 'none',
+    //                         border: 'none',
+    //                         fontSize: '24px',
+    //                         cursor: 'pointer',
+    //                         zIndex: 1001
+    //                     }}
+    //                 >
+    //                     ×
+    //                 </button>
+
+    //                 <div style={{ padding: '20px' }}>
+    //                     <div style={{
+    //                         display: 'flex',
+    //                         gap: '20px',
+    //                         alignItems: 'flex-start',
+    //                         // Stack vertically on mobile
+    //                         flexDirection: isMobile ? 'column' : 'row'
+    //                     }}>
+    //                         {/* Image section */}
+    //                         <div style={{
+    //                             flex: isMobile ? 'none' : '0 0 300px',
+    //                             width: isMobile ? '100%' : '300px',
+    //                             minHeight: '200px'
+    //                         }}>
+    //                             {meal.imageUrl && (
+    //                                 <img
+    //                                     src={meal.imageUrl}
+    //                                     alt={meal.itemName}
+    //                                     style={{
+    //                                         width: '100%',
+    //                                         height: '200px',
+    //                                         objectFit: 'cover',
+    //                                         borderRadius: '8px'
+    //                                     }}
+    //                                 />
+    //                             )}
+    //                         </div>
+
+    //                         {/* Details section */}
+    //                         <div style={{
+    //                             flex: '1',
+    //                             display: 'flex',
+    //                             flexDirection: 'column',
+    //                             gap: '15px',
+    //                             width: isMobile ? '100%' : 'auto'
+    //                         }}>
+    //                             {/* Title and quantity controls */}
+    //                             <div style={{
+    //                                 display: 'flex',
+    //                                 justifyContent: 'space-between',
+    //                                 alignItems: 'flex-start',
+    //                                 flexDirection: isMobile ? 'column' : 'row',
+    //                                 gap: isMobile ? '10px' : '0'
+    //                             }}>
+    //                                 <div style={{ width: '100%' }}>
+    //                                     <h4 style={{ margin: '0 0 5px 0', color: '#333' }}>
+    //                                         {meal.itemName}
+    //                                         {meal.hasCustomIngredients && (
+    //                                             <span style={{
+    //                                                 marginLeft: '8px',
+    //                                                 fontSize: '12px',
+    //                                                 backgroundColor: '#f39c12',
+    //                                                 color: 'white',
+    //                                                 padding: '2px 6px',
+    //                                                 borderRadius: '3px'
+    //                                             }}>
+    //                                                 CUSTOMIZED
+    //                                             </span>
+    //                                         )}
+    //                                     </h4>
+    //                                     <div style={{ fontSize: '12px', color: '#666' }}>
+    //                                         Per serving: {meal.calories}cal • {meal.protein}g protein • {meal.carbs}g carbs
+    //                                     </div>
+    //                                 </div>
+
+    //                                 {/* Quantity controls */}
+    //                                 <div style={{
+    //                                     display: 'flex',
+    //                                     alignItems: 'center',
+    //                                     gap: '10px',
+    //                                     width: isMobile ? '100%' : 'auto',
+    //                                     justifyContent: isMobile ? 'space-between' : 'flex-end'
+    //                                 }}>
+    //                                     <label style={{ fontSize: '14px', color: '#666' }}>Servings:</label>
+    //                                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+    //                                         <button
+    //                                             onClick={() => handleQuantityChange(meal.actualIndex, Math.max(0, meal.quantity - 1))}
+    //                                             disabled={saving || meal.quantity <= 0}
+    //                                             style={{
+    //                                                 width: '30px',
+    //                                                 height: '30px',
+    //                                                 border: '1px solid #ccc',
+    //                                                 borderRadius: '4px',
+    //                                                 backgroundColor: '#f8f9fa',
+    //                                                 cursor: (saving || meal.quantity <= 0) ? 'not-allowed' : 'pointer',
+    //                                                 fontSize: '16px'
+    //                                             }}
+    //                                         >
+    //                                             −
+    //                                         </button>
+    //                                         <input
+    //                                             type="number"
+    //                                             value={meal.quantity}
+    //                                             onChange={(e) => handleQuantityChange(meal.actualIndex, parseInt(e.target.value) || 0)}
+    //                                             style={{
+    //                                                 width: '60px',
+    //                                                 padding: '5px 8px',
+    //                                                 border: '1px solid #ccc',
+    //                                                 borderRadius: '4px',
+    //                                                 fontSize: '14px',
+    //                                                 textAlign: 'center'
+    //                                             }}
+    //                                         />
+    //                                         <button
+    //                                             onClick={() => handleQuantityChange(meal.actualIndex, meal.quantity + 1)}
+    //                                             disabled={saving}
+    //                                             style={{
+    //                                                 width: '30px',
+    //                                                 height: '30px',
+    //                                                 border: '1px solid #ccc',
+    //                                                 borderRadius: '4px',
+    //                                                 backgroundColor: '#f8f9fa',
+    //                                                 cursor: saving ? 'not-allowed' : 'pointer',
+    //                                                 fontSize: '16px'
+    //                                             }}
+    //                                         >
+    //                                             +
+    //                                         </button>
+    //                                     </div>
+    //                                 </div>
+    //                             </div>
+
+    //                             {/* All your existing substitution sections */}
+    //                             <ProteinSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+    //                             <VeggieSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+    //                             <StarchSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+    //                             {meal.meal !== 'Snack' && (
+    //                                 <SauceSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+    //                             )}
+    //                             <GarnishSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+
+    //                             {/* Ingredients section */}
+    //                             {meal.meal === 'Snack' && (meal.allIngredients && meal.allIngredients.length > 0) && (
+    //                                 <div>
+    //                                     <label style={{
+    //                                         display: 'block',
+    //                                         marginBottom: '8px',
+    //                                         fontSize: '14px',
+    //                                         fontWeight: 'bold',
+    //                                         color: '#555'
+    //                                     }}>
+    //                                         Ingredients (click to add/remove):
+    //                                     </label>
+    //                                     <div style={{
+    //                                         display: 'flex',
+    //                                         flexWrap: 'wrap',
+    //                                         gap: isMobile ? '6px' : '8px'
+    //                                     }}>
+    //                                         {meal.allIngredients.map((ingredient, ingredientIndex) => {
+    //                                             const isActive = meal.ingredients.includes(ingredient.name);
+    //                                             return (
+    //                                                 <button
+    //                                                     key={ingredientIndex}
+    //                                                     onClick={() => handleToggleIngredient(meal.actualIndex, ingredient.name, isActive)}
+    //                                                     disabled={saving}
+    //                                                     style={{
+    //                                                         ...getIngredientButtonStyle(isActive, saving),
+    //                                                         fontSize: isMobile ? '12px' : '13px',
+    //                                                         padding: isMobile ? '4px 8px' : '6px 12px'
+    //                                                     }}
+    //                                                     title={isActive ? `Remove ${ingredient.name}` : `Add ${ingredient.name}`}
+    //                                                 >
+    //                                                     <span style={{
+    //                                                         marginRight: '4px',
+    //                                                         fontSize: '12px'
+    //                                                     }}>
+    //                                                         {isActive ? '✓' : '+'}
+    //                                                     </span>
+    //                                                     {ingredient.name}
+    //                                                 </button>
+    //                                             );
+    //                                         })}
+    //                                     </div>
+    //                                 </div>
+    //                             )}
+    //                         </div>
+    //                     </div>
+    //                 </div>
+    //             </div>
+    //         </div>
+    //     );
+    // };
 
     const ProteinSubstitutionSection = ({ order, orderIndex }) => {
         // Direct access - no loading state needed!

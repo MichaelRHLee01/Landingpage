@@ -1,0 +1,40 @@
+/* Test if CSS is loading
+.meal-modal {
+    border: 3px solid red !important;
+} */
+
+/* Mobile-responsive modal fixes */
+@media (max-width: 768px) {
+    .meal-modal {
+        margin: 10px !important;
+        max-width: calc(100vw - 20px) !important;
+        max-height: calc(100vh - 20px) !important;
+    }
+
+    .meal-modal-content {
+        flex-direction: column !important;
+        gap: 15px !important;
+    }
+
+    .meal-modal-image {
+        flex: none !important;
+        width: 100% !important;
+        max-width: none !important;
+    }
+
+    .meal-modal-details {
+        flex: 1 !important;
+        width: 100% !important;
+    }
+
+    /* Fix button wrapping */
+    .ingredient-buttons {
+        gap: 6px !important;
+    }
+
+    .ingredient-button {
+        font-size: 12px !important;
+        padding: 4px 8px !important;
+        white-space: nowrap;
+    }
+}
