@@ -3,63 +3,49 @@
     border: 3px solid red !important;
 } */
 
-/* Mobile-responsive modal fixes */
+/* Mobile modal scroll fix */
 @media (max-width: 768px) {
 
-    /* Fix the modal container overflow issue */
-    .meal-modal {
-        margin: 10px !important;
-        max-width: calc(100vw - 20px) !important;
-        max-height: calc(100vh - 20px) !important;
-        /* Add these lines to fix the overflow: */
-        position: relative !important;
-        top: auto !important;
-        transform: none !important;
-    }
-
-    .meal-modal-content {
-        flex-direction: column !important;
-        gap: 15px !important;
-    }
-
-    .meal-modal-image {
-        flex: none !important;
-        width: 100% !important;
-        max-width: none !important;
-    }
-
-    .meal-modal-details {
-        flex: 1 !important;
-        width: 100% !important;
-    }
-
-    /* Fix button wrapping */
-    .ingredient-buttons {
-        gap: 6px !important;
-    }
-
-    .ingredient-button {
-        font-size: 12px !important;
-        padding: 4px 8px !important;
-        white-space: nowrap;
-    }
-}
-
-/* Alternative fix - update the modal container positioning */
-@media (max-width: 768px) {
-
-    /* Target the modal container div (the one with backgroundColor: 'rgba(0,0,0,0.5)') */
+    /* Modal container - DISABLE scrolling, just position */
     .meal-modal-container {
         align-items: flex-start !important;
-        padding: 10px !important;
-        overflow-y: auto !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        /* ← KILL outer scroll */
     }
 
+    /* Modal itself - THIS does all the scrolling */
     .meal-modal {
-        margin: 10px auto !important;
-        margin-top: 20px !important;
-        max-width: calc(100vw - 20px) !important;
-        max-height: calc(100vh - 40px) !important;
+        margin: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        /* ← Full height */
+        max-height: none !important;
+        border-radius: 0 !important;
+        /* Full screen on mobile */
+        overflow-y: auto !important;
+        /* ← ONLY inner scroll */
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* Close button - fixed position so it's always visible */
+    .meal-modal button[style*="position: absolute"] {
+        position: fixed !important;
+        top: 10px !important;
+        right: 10px !important;
+        z-index: 9999 !important;
+        background: rgba(0, 0, 0, 0.7) !important;
+        color: white !important;
+        border-radius: 50% !important;
+        width: 40px !important;
+        height: 40px !important;
+    }
+
+    /* Content flows normally with proper padding */
+    .meal-modal>div {
+        padding: 50px 20px 20px 20px !important;
+        /* Extra top padding for close button */
     }
 
     .meal-modal-content {
@@ -70,7 +56,6 @@
     .meal-modal-image {
         flex: none !important;
         width: 100% !important;
-        max-width: none !important;
     }
 
     .meal-modal-details {

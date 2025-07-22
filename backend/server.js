@@ -1431,6 +1431,15 @@ app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
     }
 });
 
+app.get('/api/test-deploy', (req, res) => {
+    res.json({
+        message: 'NEW CODE IS LIVE!',
+        timestamp: new Date().toISOString(),
+        version: 'July22-4am-deploy'
+    });
+});
+
+
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Nutrition-aware server running on port ${PORT}`));
