@@ -348,6 +348,7 @@ export default function MealPlanViewer() {
                     position: 'relative'
 
                 }}
+                key={meal.recordId}
                 onClick={(e) => e.stopPropagation()}
             >
                 <button
