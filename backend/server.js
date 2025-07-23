@@ -6,7 +6,7 @@ const app = express();
 app.use(express.json());
 
 let CACHED_STANDARD_SAUCES = null;
-let CACHED_INGREDIENT_COMPONENTS = {}; // added this
+let CACHED_INGREDIENT_COMPONENTS = {};
 
 // Helper function to get ingredient name from ID
 const getIngredientName = async (ingredientId) => {
@@ -419,7 +419,9 @@ app.patch('/api/orders/:token', async (req, res) => {
 
         // Verify customer exists
         const customerRecords = await base('Open Orders').select({
-            filterByFormula: `ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}'`,
+            // filterByFormula: `ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}'`,
+            filterByFormula: `SEARCH('${token}', ARRAYJOIN({To_Match_Client_Nutrition}, "")) > 0`,
+
             maxRecords: 1
         }).all();
 
@@ -604,8 +606,6 @@ app.patch('/api/orders/:token/toggle-starch', async (req, res) => {
     }
 });
 
-
-
 // GET endpoint - get nutrition summary for a customer
 app.get('/api/nutrition/:token', async (req, res) => {
     try {
@@ -634,6 +634,8 @@ app.post('/api/send-emails', async (req, res) => {
 
 
 app.get('/api/orders/:token', async (req, res) => {
+    console.log('🚨 API REQUEST RECEIVED:', req.params.token);
+
     req.setTimeout(25000, () => {
         res.status(408).json({ error: 'Request timeout - try refreshing' });
     });
@@ -703,7 +705,7 @@ app.get('/api/orders/:token', async (req, res) => {
         if (!orderRecords.length) {
             return res.json({
                 customer: {
-                    name: customerRecord.fields.Name,
+                    name: customerRecord.fields.First_Name + ' ' + customerRecord.fields.Last_Name,
                     email: customerRecord.fields.Email
                 },
                 nutritionGoals: {
@@ -735,7 +737,7 @@ app.get('/api/orders/:token', async (req, res) => {
             if (r.fields['Original Ingredients']) {
                 r.fields['Original Ingredients'].forEach(id => ingredientRecordIds.add(id));
             }
-            orderToMealTypeMap[r.fields['#']] = r.fields['Meal Portion'];
+            orderToMealTypeMap[r.id] = r.fields['Meal Portion'];
         });
 
         // Step 6: Fetch ingredient names from Ingredients table + ALL variant ingredients
@@ -944,7 +946,7 @@ app.get('/api/orders/:token', async (req, res) => {
 
         const response = {
             customer: {
-                name: customerRecord.fields.Name,
+                name: customerRecord.fields.First_Name + ' ' + customerRecord.fields.Last_Name,
                 email: customerEmail
             },
             nutritionGoals: clientGoals,
@@ -963,7 +965,26 @@ app.get('/api/orders/:token', async (req, res) => {
 
 
         // console.log('Returning optimized response with', orders.length, 'orders and ingredients');
+
+
+        // res.setHeader('Content-Type', 'application/json');
+        // res.setHeader('Content-Length', JSON.stringify(response).length);
+
+        // res.writeHead(200, { 'Content-Type': 'application/json' });
+        // res.end(JSON.stringify(response));
+
+
+
+        // console.log('🎯 About to send response...');
+        // console.log('Response size:', JSON.stringify(response).length);
+        // console.log('Response keys:', Object.keys(response));
+
+
+
+
         res.json(response);
+        // console.log('✅ Response sent successfully!');
+
     } catch (error) {
         console.error('Error fetching orders:', error);
         res.status(500).json({ error: 'Internal server error', details: error.message });
@@ -1432,13 +1453,10 @@ app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
 });
 
 
-
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => console.log(`Nutrition-aware server running on port ${PORT}`));
 
 // Add this to your existing server.js - UPDATED GET endpoint with ingredients
 
 
 // NEW ENDPOINT - Delete ingredients from an order
-
-// Skadoosh
