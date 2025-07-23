@@ -81,6 +81,11 @@ export default function MealPlanViewer() {
         const oldQuantity = order.quantity;
         const finalQuantity = Math.max(0, parseInt(newQuantity) || 0);
 
+        // Save scroll position
+        const modal = document.querySelector('.meal-modal');
+        const scrollTop = modal?.scrollTop || 0;
+
+
         // Update UI immediately for responsiveness
         const updatedOrders = [...orders];
         updatedOrders[index] = {
@@ -113,6 +118,12 @@ export default function MealPlanViewer() {
                 setSuccessMessage(`Updated ${order.itemName} to ${finalQuantity} serving${finalQuantity !== 1 ? 's' : ''}`);
                 setTimeout(() => setSuccessMessage(''), 2000);
 
+                setTimeout(() => {
+                    const modal = document.querySelector('.meal-modal');
+                    if (modal) modal.scrollTop = scrollTop;
+                }, 0);
+
+
             } catch (err) {
                 // Revert UI on error
                 const revertedOrders = [...orders];
@@ -131,6 +142,12 @@ export default function MealPlanViewer() {
     };
 
     const handleProteinSubstitution = async (orderIndex, newProteinId, oldProteinId) => {
+
+        // Save scroll position
+        const modal = document.querySelector('.meal-modal');
+        const scrollTop = modal?.scrollTop || 0;
+
+
         const order = orders[orderIndex];
 
         try {
@@ -163,6 +180,11 @@ export default function MealPlanViewer() {
             setSuccessMessage(`Protein updated successfully!`);
             setTimeout(() => setSuccessMessage(''), 2000);
 
+            setTimeout(() => {
+                const modal = document.querySelector('.meal-modal');
+                if (modal) modal.scrollTop = scrollTop;
+            }, 0);
+
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to update protein');
             console.error('Error updating protein:', err);
@@ -174,6 +196,12 @@ export default function MealPlanViewer() {
 
     // Handle ingredient toggle (add/remove)
     const handleToggleIngredient = async (orderIndex, ingredientName, isCurrentlyActive) => {
+
+        // Save scroll position
+        const modal = document.querySelector('.meal-modal');
+        const scrollTop = modal?.scrollTop || 0;
+
+
         const order = orders[orderIndex];
 
         try {
@@ -202,6 +230,11 @@ export default function MealPlanViewer() {
                     : `Added "${ingredientName}"`
             );
             setTimeout(() => setSuccessMessage(''), 2000);
+
+            setTimeout(() => {
+                const modal = document.querySelector('.meal-modal');
+                if (modal) modal.scrollTop = scrollTop;
+            }, 0);
 
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to toggle ingredient');
@@ -348,7 +381,6 @@ export default function MealPlanViewer() {
                     position: 'relative'
 
                 }}
-                key={meal.recordId}
                 onClick={(e) => e.stopPropagation()}
             >
                 <button
@@ -620,6 +652,12 @@ export default function MealPlanViewer() {
     };
 
     const handleSauceSubstitution = async (orderIndex, newSauceId, oldSauceId) => {
+
+        // Save scroll position
+        const modal = document.querySelector('.meal-modal');
+        const scrollTop = modal?.scrollTop || 0;
+
+
         const order = orders[orderIndex];
 
         try {
@@ -648,6 +686,11 @@ export default function MealPlanViewer() {
             setSuccessMessage('Sauce updated successfully!');
             setTimeout(() => setSuccessMessage(''), 2000);
 
+            setTimeout(() => {
+                const modal = document.querySelector('.meal-modal');
+                if (modal) modal.scrollTop = scrollTop;
+            }, 0);
+
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to update sauce');
             console.error('Error updating sauce:', err);
@@ -657,6 +700,11 @@ export default function MealPlanViewer() {
     };
 
     const handleToggleGarnish = async (orderIndex, garnishId, isCurrentlyActive) => {
+        // Save scroll position
+        const modal = document.querySelector('.meal-modal');
+        const scrollTop = modal?.scrollTop || 0;
+
+
         const order = orders[orderIndex];
 
         try {
@@ -687,6 +735,11 @@ export default function MealPlanViewer() {
             );
             setTimeout(() => setSuccessMessage(''), 2000);
 
+            setTimeout(() => {
+                const modal = document.querySelector('.meal-modal');
+                if (modal) modal.scrollTop = scrollTop;
+            }, 0);
+
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to toggle garnish');
             console.error('Error toggling garnish:', err);
@@ -696,6 +749,10 @@ export default function MealPlanViewer() {
     };
 
     const handleToggleVeggie = async (orderIndex, veggieId, isCurrentlyActive) => {
+        // Save scroll position
+        const modal = document.querySelector('.meal-modal');
+        const scrollTop = modal?.scrollTop || 0;
+
         const order = orders[orderIndex];
 
         try {
@@ -725,6 +782,11 @@ export default function MealPlanViewer() {
             );
             setTimeout(() => setSuccessMessage(''), 2000);
 
+            setTimeout(() => {
+                const modal = document.querySelector('.meal-modal');
+                if (modal) modal.scrollTop = scrollTop;
+            }, 0);
+
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to toggle veggie');
             console.error('Error toggling veggie:', err);
@@ -734,6 +796,10 @@ export default function MealPlanViewer() {
     };
 
     const handleStarchSubstitution = async (orderIndex, newStarchId, oldStarchId) => {
+        // Save scroll position
+        const modal = document.querySelector('.meal-modal');
+        const scrollTop = modal?.scrollTop || 0;
+
         const order = orders[orderIndex];
 
         try {
@@ -760,6 +826,11 @@ export default function MealPlanViewer() {
 
             setSuccessMessage('Starch updated successfully!');
             setTimeout(() => setSuccessMessage(''), 2000);
+
+            setTimeout(() => {
+                const modal = document.querySelector('.meal-modal');
+                if (modal) modal.scrollTop = scrollTop;
+            }, 0);
 
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to update starch');
