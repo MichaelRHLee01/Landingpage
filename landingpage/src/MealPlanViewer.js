@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
 import { useEffect, useState, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import axios from './api';
 import './MealPlanViewer.css';
 
@@ -96,7 +97,9 @@ export default function MealPlanViewer() {
             ...updatedOrders[index],
             quantity: finalQuantity
         };
-        setOrders(updatedOrders);
+        flushSync(() => {
+            setOrders(updatedOrders);
+        });
 
         // If quantity actually changed, save to Airtable
         if (finalQuantity !== oldQuantity) {
@@ -178,7 +181,9 @@ export default function MealPlanViewer() {
                     }))
                 }
             };
-            setOrders(updatedOrders);
+            flushSync(() => {
+                setOrders(updatedOrders);
+            });
 
 
             setSuccessMessage(`Protein updated successfully!`);
@@ -225,7 +230,9 @@ export default function MealPlanViewer() {
                 finalIngredients: response.data.finalIngredientIds,
                 hasCustomIngredients: response.data.finalIngredientIds.length > 0
             };
-            setOrders(updatedOrders);
+            flushSync(() => {
+                setOrders(updatedOrders);
+            });
 
             setSuccessMessage(
                 isCurrentlyActive
@@ -685,8 +692,9 @@ export default function MealPlanViewer() {
                 }))
 
             };
-            setOrders(updatedOrders);
-
+            flushSync(() => {
+                setOrders(updatedOrders);
+            });
             setSuccessMessage('Sauce updated successfully!');
             setTimeout(() => setSuccessMessage(''), 2000);
 
@@ -731,8 +739,9 @@ export default function MealPlanViewer() {
                 }))
 
             };
-            setOrders(updatedOrders);
-
+            flushSync(() => {
+                setOrders(updatedOrders);
+            });
             setSuccessMessage(
                 isCurrentlyActive ? 'Garnish removed' : 'Garnish added'
             );
@@ -779,8 +788,9 @@ export default function MealPlanViewer() {
                     isActive: veggie.id === veggieId ? !isCurrentlyActive : veggie.isActive
                 }))
             };
-            setOrders(updatedOrders);
-
+            flushSync(() => {
+                setOrders(updatedOrders);
+            });
             setSuccessMessage(
                 isCurrentlyActive ? 'Veggie removed' : 'Veggie added'
             );
@@ -825,8 +835,9 @@ export default function MealPlanViewer() {
                     isActive: starch.id === newStarchId  // Only the new one is active
                 }))
             };
-            setOrders(updatedOrders);
-
+            flushSync(() => {
+                setOrders(updatedOrders);
+            });
             setSuccessMessage('Starch updated successfully!');
             setTimeout(() => setSuccessMessage(''), 2000);
 
