@@ -1453,7 +1453,7 @@ app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
 });
 
 
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Nutrition-aware server running on port ${PORT}`));
 
 // Add this to your existing server.js - UPDATED GET endpoint with ingredients
