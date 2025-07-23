@@ -798,6 +798,8 @@ export default function MealPlanViewer() {
 
             if (modalRef.current) {
                 modalRef.current.scrollTop = scrollTop;
+                console.log('Tried to restore to:', scrollTop, 'actual scroll now:', modalRef.current.scrollTop);
+
             }
 
         } catch (err) {
