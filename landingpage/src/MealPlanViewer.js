@@ -86,6 +86,8 @@ export default function MealPlanViewer() {
         // Save scroll position
         const scrollTop = modalRef.current?.scrollTop || 0;
 
+        console.log('Scroll position:', scrollTop);
+
 
 
         // Update UI immediately for responsiveness
@@ -147,6 +149,8 @@ export default function MealPlanViewer() {
         // Save scroll position
         const scrollTop = modalRef.current?.scrollTop || 0;
 
+        console.log('Scroll position:', scrollTop);
+
 
         const order = orders[orderIndex];
 
@@ -198,6 +202,7 @@ export default function MealPlanViewer() {
 
         // Save scroll position
         const scrollTop = modalRef.current?.scrollTop || 0;
+        console.log('Scroll position:', scrollTop);
 
 
         const order = orders[orderIndex];
@@ -653,6 +658,7 @@ export default function MealPlanViewer() {
         // Save scroll position
 
         const scrollTop = modalRef.current?.scrollTop || 0;
+        console.log('Scroll position:', scrollTop);
 
 
 
@@ -699,6 +705,7 @@ export default function MealPlanViewer() {
     const handleToggleGarnish = async (orderIndex, garnishId, isCurrentlyActive) => {
         // Save scroll position
         const scrollTop = modalRef.current?.scrollTop || 0;
+        console.log('Scroll position:', scrollTop);
 
 
         const order = orders[orderIndex];
@@ -747,6 +754,7 @@ export default function MealPlanViewer() {
     const handleToggleVeggie = async (orderIndex, veggieId, isCurrentlyActive) => {
         // Save scroll position
         const scrollTop = modalRef.current?.scrollTop || 0;
+        console.log('Scroll position:', scrollTop);
 
 
         const order = orders[orderIndex];
@@ -793,6 +801,7 @@ export default function MealPlanViewer() {
     const handleStarchSubstitution = async (orderIndex, newStarchId, oldStarchId) => {
         // Save scroll position
         const scrollTop = modalRef.current?.scrollTop || 0;
+        console.log('Scroll position:', scrollTop);
 
         const order = orders[orderIndex];
 
