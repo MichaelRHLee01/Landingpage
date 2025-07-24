@@ -791,10 +791,10 @@ export default function MealPlanViewer() {
             flushSync(() => {
                 setOrders(updatedOrders);
             });
-            // setSuccessMessage(
-            //     isCurrentlyActive ? 'Veggie removed' : 'Veggie added'
-            // );
-            // setTimeout(() => setSuccessMessage(''), 2000);
+            setSuccessMessage(
+                isCurrentlyActive ? 'Veggie removed' : 'Veggie added'
+            );
+            setTimeout(() => setSuccessMessage(''), 2000);
 
             if (modalRef.current) {
                 modalRef.current.scrollTop = scrollTop;

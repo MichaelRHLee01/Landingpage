@@ -264,27 +264,27 @@ const getVeggieStarchOptions = async (allIngredientIds, ingredientNames, ingredi
 
     // Step 3: Get variant veggies for this meal
     const allVariants = await getCachedVariants();
-    const variantVeggies = [];
+    // const variantVeggies = [];
 
-    for (const variant of allVariants) {
-        const variantType = variant.fields['Variant Type'];
-        const applicableTo = variant.fields['Applicable to'] || '';
-        const variantIngredients = variant.fields['Ingredient'] || [];
+    // for (const variant of allVariants) {
+    //     const variantType = variant.fields['Variant Type'];
+    //     const applicableTo = variant.fields['Applicable to'] || '';
+    //     const variantIngredients = variant.fields['Ingredient'] || [];
 
-        if (!applicableTo.includes(mealType) || variantType !== 'Veggie Substitution') continue;
+    //     if (!applicableTo.includes(mealType) || variantType !== 'Veggie Substitution') continue;
 
-        for (const ingredientId of variantIngredients) {
-            const ingredientName = ingredientNames[ingredientId];
-            if (ingredientName) {
-                variantVeggies.push({
-                    id: ingredientId,
-                    name: ingredientName,
-                    isActive: Boolean(currentIngredientIds.includes(ingredientId)),
-                    source: 'variant'
-                });
-            }
-        }
-    }
+    //     for (const ingredientId of variantIngredients) {
+    //         const ingredientName = ingredientNames[ingredientId];
+    //         if (ingredientName) {
+    //             variantVeggies.push({
+    //                 id: ingredientId,
+    //                 name: ingredientName,
+    //                 isActive: Boolean(currentIngredientIds.includes(ingredientId)),
+    //                 source: 'variant'
+    //             });
+    //         }
+    //     }
+    // }
 
     // Step 4: Combine all, removing duplicates (prioritize current > original > variant)
     const allVeggieIds = new Set();
@@ -305,12 +305,12 @@ const getVeggieStarchOptions = async (allIngredientIds, ingredientNames, ingredi
     });
 
     // Add variant veggies if not already added
-    variantVeggies.forEach(veggie => {
-        if (!allVeggieIds.has(veggie.id)) {
-            allVeggieIds.add(veggie.id);
-            finalVeggieOptions.push(veggie);
-        }
-    });
+    // variantVeggies.forEach(veggie => {
+    //     if (!allVeggieIds.has(veggie.id)) {
+    //         allVeggieIds.add(veggie.id);
+    //         finalVeggieOptions.push(veggie);
+    //     }
+    // });
 
     // console.log(`🥕 Final veggie options: ${finalVeggieOptions.length}`);
     // console.log('🥕 Current (green):', currentVeggies.map(v => v.name));
@@ -636,9 +636,9 @@ app.post('/api/send-emails', async (req, res) => {
 app.get('/api/orders/:token', async (req, res) => {
     console.log('🚨 API REQUEST RECEIVED:', req.params.token);
 
-    req.setTimeout(25000, () => {
-        res.status(408).json({ error: 'Request timeout - try refreshing' });
-    });
+    // req.setTimeout(25000, () => {
+    //     res.status(408).json({ error: 'Request timeout - try refreshing' });
+    // });
 
     try {
         const token = req.params.token;
@@ -983,7 +983,7 @@ app.get('/api/orders/:token', async (req, res) => {
 
 
         res.json(response);
-        // console.log('✅ Response sent successfully!');
+        console.log('✅ Response sent successfully!');
 
     } catch (error) {
         console.error('Error fetching orders:', error);
