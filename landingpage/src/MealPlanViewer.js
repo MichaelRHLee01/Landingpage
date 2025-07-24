@@ -147,6 +147,30 @@ export default function MealPlanViewer() {
         }
     };
 
+    const useViewportBasedArrow = () => {
+        const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
+
+        useEffect(() => {
+            const handleResize = () => setViewportWidth(window.innerWidth);
+            window.addEventListener('resize', handleResize);
+            return () => window.removeEventListener('resize', handleResize);
+        }, []);
+
+        const shouldShowArrow = (itemCount) => {
+            // Simple calculation based on your card width
+            const cardWidth = 280 + 15; // card + gap
+            const containerPadding = 40;
+            const availableWidth = viewportWidth - containerPadding;
+            const maxCards = Math.floor(availableWidth / cardWidth);
+
+            return itemCount > maxCards;
+        };
+
+        return { shouldShowArrow, viewportWidth };
+    };
+
+    const { shouldShowArrow } = useViewportBasedArrow();
+
     const handleProteinSubstitution = async (orderIndex, newProteinId, oldProteinId) => {
 
         // Save scroll position
@@ -1243,7 +1267,9 @@ export default function MealPlanViewer() {
 
                 {/* Meal Orders */}
                 <div style={{ padding: '20px' }}>
-                    <h3 style={{ marginBottom: '20px' }}>Your Meals</h3>
+                    <h3 style={{ marginBottom: '20px' }}>
+                        Your Meals (click on each dish to Edit)
+                    </h3>
 
                     {/* Group orders by meal type */}
                     {['Breakfast', 'Lunch', 'Dinner', 'Snack'].map(mealType => {
@@ -1284,7 +1310,7 @@ export default function MealPlanViewer() {
                                     </div>
 
                                     {/* Fixed arrow button - always visible */}
-                                    {mealOrders.length > 3 && (
+                                    {shouldShowArrow(mealOrders.length) && (
                                         <div style={{
                                             position: 'absolute',
                                             top: '50%',
