@@ -217,6 +217,7 @@ const getProteinOptionsForOrder = async (currentProteinId, mealType) => {
                         id: ingredientId,
                         name: ingredient.fields['Ingredient Name'] || ingredient.fields['USDA Name'] || 'Unknown',
                         variantName: variant.fields['Variant Name'],
+                        // price: variant.fields['Price'] || 0, // Added for +4 protein log
                         isActive: Boolean(ingredientId === currentProteinId),
                         displayName: ingredient.fields['Ingredient Name'] === 'Egg'
                             ? `${ingredient.fields['Ingredient Name']} ${variant.fields['Variant Name']}`
@@ -510,7 +511,7 @@ app.patch('/api/orders/:token/toggle-veggie', async (req, res) => {
             id: recordId,
             fields: {
                 'Final Ingredients': updatedIngredientIds,
-                'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + ingredientName + ' ' + (shouldActivate ? 'added' : 'removed') + ';\n'
+                'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + oldProteinName + ' replaced with ' + newProteinName + (upgradePrice > 0 ? ` (+$${upgradePrice} upgrade)` : '') + ';\n'
             }
         }]);
 

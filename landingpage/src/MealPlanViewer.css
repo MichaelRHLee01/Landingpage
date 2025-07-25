@@ -92,3 +92,15 @@
 .meal-modal-details>div:first-child>div:last-child {
     margin-right: 50px !important;
 }
+
+[data-meal-type] {
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE/Edge */
+}
+
+[data-meal-type]::-webkit-scrollbar {
+    display: none;
+    /* Chrome/Safari */
+}
