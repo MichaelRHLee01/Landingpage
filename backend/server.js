@@ -217,7 +217,7 @@ const getProteinOptionsForOrder = async (currentProteinId, mealType) => {
                         id: ingredientId,
                         name: ingredient.fields['Ingredient Name'] || ingredient.fields['USDA Name'] || 'Unknown',
                         variantName: variant.fields['Variant Name'],
-                        // price: variant.fields['Price'] || 0, // Added for +4 protein log
+                        price: variant.fields['Price'] || 0, // Added for +4 protein
                         isActive: Boolean(ingredientId === currentProteinId),
                         displayName: ingredient.fields['Ingredient Name'] === 'Egg'
                             ? `${ingredient.fields['Ingredient Name']} ${variant.fields['Variant Name']}`
@@ -511,7 +511,7 @@ app.patch('/api/orders/:token/toggle-veggie', async (req, res) => {
             id: recordId,
             fields: {
                 'Final Ingredients': updatedIngredientIds,
-                'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + oldProteinName + ' replaced with ' + newProteinName + (upgradePrice > 0 ? ` (+$${upgradePrice} upgrade)` : '') + ';\n'
+                'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + ingredientName + ' ' + (shouldActivate ? 'added' : 'removed') + ';\n'
             }
         }]);
 
@@ -993,14 +993,12 @@ app.get('/api/orders/:token', async (req, res) => {
 });
 
 
-// ============ NEW ENDPOINT: Replace Protein ============
-
 app.patch('/api/orders/:token/replace-protein', async (req, res) => {
     try {
         const token = req.params.token;
-        const { recordId, newProteinId, oldProteinId } = req.body;
+        const { recordId, newProteinId, oldProteinId, upgradePrice = 0 } = req.body;
 
-        console.log('🥩 Replacing protein:', oldProteinId, '->', newProteinId);
+        console.log('🥩 Replacing protein:', oldProteinId, '->', newProteinId, upgradePrice > 0 ? `(+$${upgradePrice})` : '');
 
         // Verify customer exists
         const customerRecords = await base('Client').select({
@@ -1039,19 +1037,27 @@ app.patch('/api/orders/:token/replace-protein', async (req, res) => {
         const oldProteinName = await getIngredientName(oldProteinId);
         const newProteinName = await getIngredientName(newProteinId);
 
+        // Create log entry with price info
+        const logEntry = upgradePrice > 0
+            ? `${oldProteinName} upgraded to ${newProteinName} (+$${upgradePrice} premium)`
+            : `${oldProteinName} replaced with ${newProteinName}`;
+
         // Update Final Ingredients
         await base('Open Orders').update([{
             id: recordId,
             fields: {
                 'Final Ingredients': updatedIngredientIds,
-                'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + oldProteinName + ' replaced with ' + newProteinName + ';\n'
+                'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + logEntry + ';\n'
             }
         }]);
 
         res.json({
             success: true,
-            message: `Protein updated to ${newProteinName}`,
-            updatedIngredientIds: updatedIngredientIds
+            message: upgradePrice > 0
+                ? `Protein upgraded to ${newProteinName} (+$${upgradePrice})`
+                : `Protein updated to ${newProteinName}`,
+            updatedIngredientIds: updatedIngredientIds,
+            upgradePrice: upgradePrice
         });
 
     } catch (error) {

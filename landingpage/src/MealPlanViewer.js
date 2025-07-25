@@ -23,6 +23,10 @@ export default function MealPlanViewer() {
 
     const modalRef = useRef(null);
 
+    // State for price confirmation
+    const [showPriceConfirm, setShowPriceConfirm] = useState(null);
+
+
 
 
     useEffect(() => {
@@ -242,27 +246,100 @@ export default function MealPlanViewer() {
 
 
 
+    // const handleProteinSubstitution = async (orderIndex, newProteinId, oldProteinId) => {
+
+    //     // Save scroll position
+    //     const scrollTop = modalRef.current?.scrollTop || 0;
+
+    //     console.log('Scroll position:', scrollTop);
+
+
+    //     const order = orders[orderIndex];
+
+    //     try {
+    //         setSaving(true);
+
+    //         // Call the protein replacement endpoint
+    //         const response = await axios.patch(`/orders/${token}/replace-protein`, {
+    //             recordId: order.recordId,
+    //             newProteinId: newProteinId,
+    //             oldProteinId: oldProteinId
+    //         });
+
+    //         // Update local state immediately (no reload needed)
+    //         const updatedOrders = [...orders];
+    //         updatedOrders[orderIndex] = {
+    //             ...updatedOrders[orderIndex],
+    //             finalIngredients: response.data.updatedIngredientIds,
+    //             hasCustomIngredients: response.data.updatedIngredientIds.length > 0,
+    //             proteinOptions: {
+    //                 ...updatedOrders[orderIndex].proteinOptions,
+    //                 options: updatedOrders[orderIndex].proteinOptions.options.map(option => ({
+    //                     ...option,
+    //                     isActive: option.id === newProteinId
+    //                 }))
+    //             }
+    //         };
+    //         flushSync(() => {
+    //             setOrders(updatedOrders);
+    //         });
+
+
+    //         setSuccessMessage(`Protein updated successfully!`);
+    //         setTimeout(() => setSuccessMessage(''), 2000);
+
+    //         if (modalRef.current) {
+    //             modalRef.current.scrollTop = scrollTop;
+    //         }
+
+    //     } catch (err) {
+    //         setError(err.response?.data?.error || 'Failed to update protein');
+    //         console.error('Error updating protein:', err);
+    //     } finally {
+    //         setSaving(false);
+    //     }
+    // };
+
     const handleProteinSubstitution = async (orderIndex, newProteinId, oldProteinId) => {
+        const order = orders[orderIndex];
 
-        // Save scroll position
+        // Find the new protein option to check price
+        const newProteinOption = order.proteinOptions.options.find(opt => opt.id === newProteinId);
+        const upgradePrice = newProteinOption?.price || 0;
+
+        // If there's an upgrade price, show confirmation
+        if (upgradePrice > 0) {
+            setShowPriceConfirm({
+                orderIndex,
+                newProteinId,
+                oldProteinId,
+                proteinName: newProteinOption.displayName || newProteinOption.name,
+                price: upgradePrice
+            });
+            return; // Don't proceed until user confirms
+        }
+
+        // No upgrade price, proceed normally
+        await executeProteinSubstitution(orderIndex, newProteinId, oldProteinId, 0);
+    };
+
+    // Separate function to execute the substitution
+    const executeProteinSubstitution = async (orderIndex, newProteinId, oldProteinId, upgradePrice = 0) => {
         const scrollTop = modalRef.current?.scrollTop || 0;
-
-        console.log('Scroll position:', scrollTop);
-
-
         const order = orders[orderIndex];
 
         try {
             setSaving(true);
 
-            // Call the protein replacement endpoint
+            // Call the protein replacement endpoint with upgrade price
             const response = await axios.patch(`/orders/${token}/replace-protein`, {
                 recordId: order.recordId,
                 newProteinId: newProteinId,
-                oldProteinId: oldProteinId
+                oldProteinId: oldProteinId,
+                upgradePrice: upgradePrice // Add this field
             });
 
-            // Update local state immediately (no reload needed)
+            // Update local state immediately
             const updatedOrders = [...orders];
             updatedOrders[orderIndex] = {
                 ...updatedOrders[orderIndex],
@@ -276,13 +353,17 @@ export default function MealPlanViewer() {
                     }))
                 }
             };
+
             flushSync(() => {
                 setOrders(updatedOrders);
             });
 
+            const message = upgradePrice > 0
+                ? `Protein upgraded! Additional $${upgradePrice} will be added to your invoice.`
+                : 'Protein updated successfully!';
 
-            setSuccessMessage(`Protein updated successfully!`);
-            setTimeout(() => setSuccessMessage(''), 2000);
+            setSuccessMessage(message);
+            setTimeout(() => setSuccessMessage(''), 3000);
 
             if (modalRef.current) {
                 modalRef.current.scrollTop = scrollTop;
@@ -293,8 +374,10 @@ export default function MealPlanViewer() {
             console.error('Error updating protein:', err);
         } finally {
             setSaving(false);
+            setShowPriceConfirm(null); // Clear confirmation
         }
     };
+
 
 
     // Handle ingredient toggle (add/remove)
@@ -680,6 +763,100 @@ export default function MealPlanViewer() {
             </div>
         </div >
     );
+
+
+    // Price confirmation modal component
+    const PriceConfirmationModal = ({ confirmData, onConfirm, onCancel }) => (
+        <div
+            style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.6)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2000 // Higher than meal modal
+            }}
+            onClick={onCancel}
+        >
+            <div
+                style={{
+                    backgroundColor: 'white',
+                    borderRadius: '12px',
+                    padding: '30px',
+                    maxWidth: '400px',
+                    margin: '20px',
+                    textAlign: 'center',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+                }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3 style={{
+                    margin: '0 0 15px 0',
+                    color: '#333',
+                    fontSize: '18px'
+                }}>
+                    Premium Protein Upgrade
+                </h3>
+
+                <p style={{
+                    margin: '0 0 20px 0',
+                    color: '#666',
+                    lineHeight: '1.5'
+                }}>
+                    Switching to <strong>{confirmData.proteinName}</strong> will cost an additional <strong>${confirmData.price}</strong>. You will be charged through invoice.
+                </p>
+
+                <p style={{
+                    margin: '0 0 25px 0',
+                    fontSize: '14px',
+                    color: '#888'
+                }}>
+                    Is that okay?
+                </p>
+
+                <div style={{
+                    display: 'flex',
+                    gap: '15px',
+                    justifyContent: 'center'
+                }}>
+                    <button
+                        onClick={onCancel}
+                        style={{
+                            padding: '10px 20px',
+                            border: '1px solid #ddd',
+                            borderRadius: '6px',
+                            backgroundColor: '#f8f9fa',
+                            color: '#666',
+                            cursor: 'pointer',
+                            fontSize: '14px'
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        style={{
+                            padding: '10px 20px',
+                            border: 'none',
+                            borderRadius: '6px',
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        Confirm (+${confirmData.price})
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+
 
 
     const ProteinSubstitutionSection = ({ order, orderIndex }) => {
@@ -1454,6 +1631,20 @@ export default function MealPlanViewer() {
             )
 
             }
+            {showPriceConfirm && (
+                <PriceConfirmationModal
+                    confirmData={showPriceConfirm}
+                    onConfirm={() => {
+                        executeProteinSubstitution(
+                            showPriceConfirm.orderIndex,
+                            showPriceConfirm.newProteinId,
+                            showPriceConfirm.oldProteinId,
+                            showPriceConfirm.price
+                        );
+                    }}
+                    onCancel={() => setShowPriceConfirm(null)}
+                />
+            )}
         </div>
     )
 }
