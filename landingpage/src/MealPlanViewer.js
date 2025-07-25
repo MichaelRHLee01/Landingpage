@@ -17,7 +17,6 @@ export default function MealPlanViewer() {
     const [error, setError] = useState(null);
     const [successMessage, setSuccessMessage] = useState('');
 
-
     // for new UI
     const [selectedMeal, setSelectedMeal] = useState(null);
     const [showModal, setShowModal] = useState(false);
@@ -174,7 +173,7 @@ export default function MealPlanViewer() {
                     scrollLeft,
                     scrollWidth,
                     clientWidth,
-                    canScrollLeft: scrollLeft > 0,
+                    canScrollLeft: scrollLeft > 5, // 5px tolerance
                     canScrollRight: scrollLeft < (scrollWidth - clientWidth - 5) // 5px tolerance
                 }
             }));
@@ -196,9 +195,31 @@ export default function MealPlanViewer() {
     };
 
 
+    // const useViewportBasedArrow = () => {
+    //     const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
+
+    //     useEffect(() => {
+    //         const handleResize = () => setViewportWidth(window.innerWidth);
+    //         window.addEventListener('resize', handleResize);
+    //         return () => window.removeEventListener('resize', handleResize);
+    //     }, []);
+
+    //     const shouldShowArrow = (itemCount) => {
+    //         // Simple calculation based on your card width
+    //         const cardWidth = 280 + 15; // card + gap
+    //         const containerPadding = 40;
+    //         const availableWidth = viewportWidth - containerPadding;
+    //         const maxCards = Math.floor(availableWidth / cardWidth);
+
+    //         return itemCount > maxCards;
+    //     };
+
+    //     return { shouldShowArrow, viewportWidth };
+    // };
+
+    // const { shouldShowArrow } = useViewportBasedArrow();
     const { shouldShowArrows, updateScrollPosition, getScrollState } = useScrollArrows();
 
-    // Handle scroll events
     const handleScroll = (mealType, event) => {
         const container = event.target;
         updateScrollPosition(
@@ -209,7 +230,6 @@ export default function MealPlanViewer() {
         );
     };
 
-    // Scroll functions
     const scrollLeft = (mealType) => {
         const container = document.querySelector(`[data-meal-type="${mealType}"]`);
         if (container) {
@@ -224,20 +244,27 @@ export default function MealPlanViewer() {
         }
     };
 
-    // Initialize scroll positions when component mounts
+    // Add this useEffect to initialize scroll positions:
     useEffect(() => {
-        ['Breakfast', 'Lunch', 'Dinner', 'Snack'].forEach(mealType => {
-            const container = document.querySelector(`[data-meal-type="${mealType}"]`);
-            if (container) {
-                updateScrollPosition(
-                    mealType,
-                    container.scrollLeft,
-                    container.scrollWidth,
-                    container.clientWidth
-                );
-            }
-        });
+        const initializeScrollPositions = () => {
+            ['Breakfast', 'Lunch', 'Dinner', 'Snack'].forEach(mealType => {
+                const container = document.querySelector(`[data-meal-type="${mealType}"]`);
+                if (container) {
+                    updateScrollPosition(
+                        mealType,
+                        container.scrollLeft,
+                        container.scrollWidth,
+                        container.clientWidth
+                    );
+                }
+            });
+        };
+
+        // Small delay to ensure DOM is ready
+        setTimeout(initializeScrollPositions, 100);
     }, [orders]);
+
+
 
     const handleProteinSubstitution = async (orderIndex, newProteinId, oldProteinId) => {
 
@@ -1336,7 +1363,7 @@ export default function MealPlanViewer() {
                 {/* Meal Orders */}
                 <div style={{ padding: '20px' }}>
                     <h3 style={{ marginBottom: '20px' }}>
-                        Your Meals (click on each dish to Edit)
+                        Your Meals
                     </h3>
 
                     {/* Group orders by meal type */}
@@ -1365,10 +1392,7 @@ export default function MealPlanViewer() {
                                             display: 'flex',
                                             overflowX: 'auto',
                                             gap: '15px',
-                                            paddingBottom: '10px',
-                                            scrollbarWidth: 'none', // Firefox
-                                            msOverflowStyle: 'none', // IE/Edge
-                                            // '&::-webkit-scrollbar': { display: 'none' } // Chrome/Safari
+                                            paddingBottom: '10px'
                                         }}>
                                         {mealOrders.map((order, index) => {
                                             const actualIndex = orders.indexOf(order);
@@ -1437,6 +1461,39 @@ export default function MealPlanViewer() {
                                             →
                                         </div>
                                     )}
+
+                                    {/* Fixed arrow button - always visible
+                                    {shouldShowArrow(mealOrders.length) && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '50%',
+                                            right: '10px',
+                                            transform: 'translateY(-50%)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            borderRadius: '50%',
+                                            width: '40px',
+                                            height: '40px',
+                                            cursor: 'pointer',
+                                            backgroundColor: '#007bff',
+                                            color: 'white',
+                                            fontSize: '18px',
+                                            fontWeight: 'bold',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                            zIndex: 10
+                                        }}
+                                            onClick={() => {
+                                                // Scroll to the right when clicked
+                                                const container = document.querySelector(`[data-meal-type="${mealType}"]`);
+                                                if (container) {
+                                                    container.scrollBy({ left: 300, behavior: 'smooth' });
+                                                }
+                                            }}
+                                        >
+                                            →
+                                        </div>
+                                    )} */}
                                 </div>
                             </div>
                         );
