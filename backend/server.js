@@ -483,7 +483,7 @@ app.patch('/api/orders/:token/toggle-veggie', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
 
         let currentIngredientIds = finalIngredientIds.length > 0
             ? [...finalIngredientIds]
@@ -506,11 +506,11 @@ app.patch('/api/orders/:token/toggle-veggie', async (req, res) => {
         // Get ingredient name for logging
         const ingredientName = await getIngredientName(veggieId);
 
-        // Update Final Ingredients
+        // Update Final Ingredients with User Edits
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients': updatedIngredientIds,
+                'Final Ingredients After User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + ingredientName + ' ' + (shouldActivate ? 'added' : 'removed') + ';\n'
             }
         }]);
@@ -545,7 +545,7 @@ app.patch('/api/orders/:token/toggle-starch', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
 
         let currentIngredientIds = finalIngredientIds.length > 0
             ? [...finalIngredientIds]
@@ -582,11 +582,11 @@ app.patch('/api/orders/:token/toggle-starch', async (req, res) => {
         // Get ingredient name for logging
         const ingredientName = await getIngredientName(starchId);
 
-        // Update Final Ingredients
+        // Update Final Ingredients with User Edits
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients': updatedIngredientIds,
+                'Final Ingredients After User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + ingredientName + ' ' + (shouldActivate ? 'added' : 'removed') + ';\n'
             }
         }]);
@@ -731,9 +731,9 @@ app.get('/api/orders/:token', async (req, res) => {
         // Step 5: Get unique ingredient record IDs to resolve names
         const ingredientRecordIds = new Set();
         orderRecords.forEach(r => {
-            // Collect ingredient IDs from both Original and Final Ingredients
-            if (r.fields['Final Ingredients']) {
-                r.fields['Final Ingredients'].forEach(id => ingredientRecordIds.add(id));
+            // Collect ingredient IDs from both Original and Final Ingredients with User Edits
+            if (r.fields['Final Ingredients After User Edits']) {
+                r.fields['Final Ingredients After User Edits'].forEach(id => ingredientRecordIds.add(id));
             }
             if (r.fields['Original Ingredients']) {
                 r.fields['Original Ingredients'].forEach(id => ingredientRecordIds.add(id));
@@ -840,7 +840,7 @@ app.get('/api/orders/:token', async (req, res) => {
         // Step 7: Format response with RESOLVED INGREDIENTS
         const orders = await Promise.all(orderRecords.map(async (r) => {
             const originalIngredientIds = r.fields['Original Ingredients'] || [];
-            const finalIngredientIds = r.fields['Final Ingredients'] || [];
+            const finalIngredientIds = r.fields['Final Ingredients After User Edits'] || [];
             const currentIngredientIds = finalIngredientIds.length > 0 ? finalIngredientIds : originalIngredientIds;
             const ingredientsList = currentIngredientIds.map(id => ingredientNames[id] || id).filter(Boolean);
 
@@ -1017,9 +1017,9 @@ app.patch('/api/orders/:token/replace-protein', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
 
-        // Use Final Ingredients if exists, otherwise copy from Original
+        // Use Final Ingredients with User Edits if exists, otherwise copy from Original
         let currentIngredientIds = finalIngredientIds.length > 0
             ? [...finalIngredientIds]
             : [...originalIngredientIds];
@@ -1042,11 +1042,11 @@ app.patch('/api/orders/:token/replace-protein', async (req, res) => {
             ? `${oldProteinName} upgraded to ${newProteinName} (+$${upgradePrice} premium)`
             : `${oldProteinName} replaced with ${newProteinName}`;
 
-        // Update Final Ingredients
+        // Update Final Ingredients with User Edits
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients': updatedIngredientIds,
+                'Final Ingredients After User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + logEntry + ';\n'
             }
         }]);
@@ -1095,7 +1095,7 @@ app.patch('/api/orders/:token/ingredients/toggle', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
 
         // Get current active ingredients (final if exists, otherwise original)
         const currentActiveIds = finalIngredientIds.length > 0 ? finalIngredientIds : [...originalIngredientIds];
@@ -1135,11 +1135,11 @@ app.patch('/api/orders/:token/ingredients/toggle', async (req, res) => {
             updatedIngredientIds = currentActiveIds.filter(id => id !== targetIngredient.id);
         }
 
-        // Update Final Ingredients
+        // Update Final Ingredients with User Edits
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients': updatedIngredientIds
+                'Final Ingredients After User Edits': updatedIngredientIds
             }
         }]);
 
@@ -1189,18 +1189,18 @@ app.patch('/api/orders/:token/ingredients', async (req, res) => {
             return res.status(404).json({ error: 'Order not found' });
         }
 
-        // Get current ingredient IDs (linked records) - PRIORITIZE Final Ingredients
+        // Get current ingredient IDs (linked records) - PRIORITIZE Final Ingredients after User Edits
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
 
-        // Use Final Ingredients if exists, otherwise copy from Original to start customization
+        // Use Final Ingredients after User Edits if exists, otherwise copy from Original to start customization
         let currentIngredientIds;
         if (finalIngredientIds.length > 0) {
             currentIngredientIds = finalIngredientIds;
-            console.log('Using existing Final Ingredients:', currentIngredientIds);
+            console.log('Using existing Final Ingredients After User Edits:', currentIngredientIds);
         } else {
             currentIngredientIds = [...originalIngredientIds]; // Copy original to start customizing
-            console.log('Copying Original to Final Ingredients:', currentIngredientIds);
+            console.log('Copying Original to Final Ingredients After User Edits:', currentIngredientIds);
         }
 
         // Find which ingredient ID corresponds to the name we want to delete
@@ -1230,16 +1230,16 @@ app.patch('/api/orders/:token/ingredients', async (req, res) => {
 
         console.log('Updated ingredient IDs:', updatedIngredientIds);
         const customerEdits = orderRecord.fields['Customer Edits'] || '';
-        // Update the Final Ingredients field with the modified list of IDs
+        // Update the Final Ingredients after User Edits field with the modified list of IDs
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients': updatedIngredientIds,
+                'Final Ingredients After User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + ingredientName + ' ' + (shouldActivate ? 'added' : 'removed') + ';\n'
             }
         }]);
 
-        console.log('Successfully updated Final Ingredients in Airtable');
+        console.log('Successfully updated Final Ingredients after User Edits in Airtable');
 
         // Return updated ingredient names for frontend
         const updatedIngredientNames = ingredientsWithNames
@@ -1269,13 +1269,13 @@ app.patch('/api/orders/:token/quantity', async (req, res) => {
         const token = req.params.token;
         const { recordId, newQuantity, itemName } = req.body;
 
-        console.log('🔄 Updating quantity for:', itemName, 'to', newQuantity);
-
         // Verify customer exists
         const customerRecords = await base('Client').select({
             filterByFormula: `{Unique ID} = '${token}'`,
             maxRecords: 1
         }).all();
+
+        console.log('🔄 Updating quantity for:', customerRecords[0].fields.First_Name + ' ' + customerRecords[0].fields.Last_Name, itemName, 'to', newQuantity);
 
         if (!customerRecords.length) {
             return res.status(404).json({ error: 'Customer not found' });
@@ -1289,24 +1289,36 @@ app.patch('/api/orders/:token/quantity', async (req, res) => {
 
         const customerEdits = orderRecord.fields['Customer Edits'] || '';
         const oldQuantity = orderRecord.fields['Quantity'] || 0;
+        if (oldQuantity > 0) {
+            await base('Open Orders').create([{
+                fields: {
+                    'Order/ Subscription ID': orderRecord.fields['Order/ Subscription ID'],
+                    'Quantity': 1,
+                    'Source': 'Subscription Landing Page',
+                    'Selected Protein': orderRecord.fields['Selected Protein'],
+                    'SquareSpace/ Internal OrderItem ID': orderRecord.fields['SquareSpace/ Internal OrderItem ID'],
+                    'Meal Portion': orderRecord.fields['Meal Portion'],
+                    'To_Match_Client_Nutrition': orderRecord.fields['To_Match_Client_Nutrition'],
+                    'Airtable ItemName': orderRecord.fields['Airtable ItemName'],
+                    'Order Placed/ Algo Ran At': new Date().toISOString().split('T')[0],
+                    'Delivery Date': orderRecord.fields['Delivery Date'],
+                    'Dish ID': orderRecord.fields['Dish ID'],
+                    'Final Ingredients After User Edits': orderRecord.fields['Final Ingredients After User Edits'],
+                    'Run LLM Review& Subsitutions': true,
+                    'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + itemName + ' quantity updated from ' + oldQuantity + ' to ' + newQuantity + ';\n'
+                }
+            }]);
 
-        // Simple single record update
-        await base('Open Orders').update([{
-            id: recordId,
-            fields: {
-                'Quantity': parseInt(newQuantity) || 0,
-                'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + itemName + ' quantity updated from ' + oldQuantity + ' to ' + newQuantity + ';\n'
-            }
-        }]);
 
-        console.log('✅ Successfully updated quantity');
+            console.log('✅ Successfully updated quantity');
 
-        res.json({
-            success: true,
-            message: `Updated ${itemName} quantity to ${newQuantity}`,
-            recordId: recordId,
-            newQuantity: parseInt(newQuantity) || 0
-        });
+            res.json({
+                success: true,
+                message: `Updated ${itemName} quantity from ${oldQuantity} to ${newQuantity}`,
+                recordId: recordId,
+                newQuantity: parseInt(newQuantity) || 0
+            });
+        }
 
     } catch (error) {
         console.error('❌ Error updating quantity:', error);
@@ -1332,7 +1344,7 @@ app.patch('/api/orders/:token/replace-sauce', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
 
         let currentIngredientIds = finalIngredientIds.length > 0
             ? [...finalIngredientIds]
@@ -1373,11 +1385,11 @@ app.patch('/api/orders/:token/replace-sauce', async (req, res) => {
         const oldSauceName = await getIngredientName(oldSauceId);
         const newSauceName = await getIngredientName(newSauceId);
 
-        // Update Final Ingredients
+        // Update Final Ingredients After User Edits
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients': updatedIngredientIds,
+                'Final Ingredients After User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + oldSauceName + ' replaced with ' + newSauceName + ';\n'
             }
         }]);
@@ -1412,7 +1424,7 @@ app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
 
         let currentIngredientIds = finalIngredientIds.length > 0
             ? [...finalIngredientIds]
@@ -1435,11 +1447,11 @@ app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
         // Get ingredient name for logging
         const ingredientName = await getIngredientName(garnishId);
 
-        // Update Final Ingredients
+        // Update Final Ingredients after User Edits
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients': updatedIngredientIds,
+                'Final Ingredients After User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + ingredientName + ' ' + (shouldActivate ? 'added' : 'removed') + ';\n'
             }
         }]);
