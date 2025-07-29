@@ -93,6 +93,64 @@ export default function MealPlanViewer() {
 
         console.log('Scroll position:', scrollTop);
 
+        if (oldQuantity === 0 && finalQuantity === 1) {
+            console.log('🍽️ Adding new dish:', order.itemName, 'Dish ID:', order.dishId);
+
+            try {
+                setSaving(true);
+                setError(null);
+
+                // Call new add-dish endpoint
+                const response = await axios.post(`/orders/${token}/add-dish`, {
+                    dishId: order.dishId,
+                    mealType: order.meal
+                });
+
+                console.log('✅ Successfully added dish:', response.data);
+
+                // Update the order in local state with new record ID
+                const updatedOrders = [...orders];
+                updatedOrders[index] = {
+                    ...updatedOrders[index],
+                    quantity: 1,
+                    recordId: response.data.recordId,
+                    isOrdered: true,
+                    hasCustomIngredients: false // New dish starts without customizations
+                };
+
+                flushSync(() => {
+                    setOrders(updatedOrders);
+                });
+
+                // Update original orders to reflect saved state
+                const updatedOriginalOrders = [...originalOrders];
+                updatedOriginalOrders[index] = {
+                    ...updatedOriginalOrders[index],
+                    quantity: 1,
+                    recordId: response.data.recordId
+                };
+                setOriginalOrders(updatedOriginalOrders);
+
+                setSuccessMessage(`Added ${order.itemName} to your ${order.meal.toLowerCase()} meals!`);
+                setTimeout(() => setSuccessMessage(''), 3000);
+
+                if (modalRef.current) {
+                    modalRef.current.scrollTop = scrollTop;
+                }
+
+                return; // Exit early - don't proceed to regular quantity update logic
+
+            } catch (err) {
+                console.error('❌ Error adding new dish:', err);
+                setError(err.response?.data?.error || 'Failed to add dish');
+
+                // Don't update UI on error - quantity stays at 0
+                return;
+            } finally {
+                setSaving(false);
+            }
+        }
+
 
 
         // Update UI immediately for responsiveness
@@ -110,6 +168,13 @@ export default function MealPlanViewer() {
             try {
                 setSaving(true);
                 setError(null);
+
+                // ✅ EDGE CASE: Handle quantity going to 0 (remove dish)
+                if (finalQuantity === 0) {
+                    // You might want to implement a "remove dish" endpoint
+                    // For now, we'll use the existing quantity endpoint
+                    console.log('⚠️ Setting quantity to 0 - dish will be removed');
+                }
 
                 // Use the new simpler endpoint
                 await axios.patch(`/orders/${token}/quantity`, {
@@ -433,20 +498,26 @@ export default function MealPlanViewer() {
         <div
             onClick={() => openModal(meal, actualIndex)}
             style={{
-                border: '1px solid #ddd',
+                border: meal.quantity === 0 ? '2px dashed #ccc' : '1px solid #ddd', // Dashed border for available dishes
+                // border: '1px solid #ddd',
                 borderRadius: '8px',
                 padding: '10px',
                 cursor: 'pointer',
-                backgroundColor: '#fafafa',
+                // backgroundColor: '#fafafa',
+                backgroundColor: meal.quantity === 0 ? '#f9f9f9' : '#fafafa', // Slightly different background
                 transition: 'all 0.2s ease',
                 minHeight: '180px',
                 display: 'flex',
                 flexDirection: 'column',
                 width: '280px',
-                flexShrink: 0
+                flexShrink: 0,
+                opacity: meal.quantity === 0 ? 0.8 : 1 // Slightly faded for available dishes
+
             }}
             onMouseEnter={(e) => e.target.style.backgroundColor = '#f0f0f0'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = '#fafafa'}
+            // onMouseLeave={(e) => e.target.style.backgroundColor = '#fafafa'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = meal.quantity === 0 ? '#f9f9f9' : '#fafafa'}
+
         >
             {meal.imageUrl && (
                 <div style={{
@@ -470,6 +541,19 @@ export default function MealPlanViewer() {
                 }}>
                     <div style={{ fontSize: '12px', fontWeight: 'bold', flex: 1 }}>
                         {meal.itemName}
+                        {meal.quantity === 0 && (
+                            <span style={{
+                                marginLeft: '6px',
+                                fontSize: '10px',
+                                backgroundColor: '#e3f2fd',
+                                color: '#1976d2',
+                                padding: '2px 4px',
+                                borderRadius: '3px',
+                                fontWeight: 'normal'
+                            }}>
+                                Available
+                            </span>
+                        )}
                     </div>
 
                     {/* Quantity controls */}
@@ -635,6 +719,30 @@ export default function MealPlanViewer() {
                                 <div>
                                     <h4 style={{ margin: '0 0 5px 0', color: '#333' }}>
                                         {meal.itemName}
+                                        {meal.quantity === 0 && (
+                                            <span style={{
+                                                marginLeft: '8px',
+                                                fontSize: '12px',
+                                                backgroundColor: '#e3f2fd',
+                                                color: '#1976d2',
+                                                padding: '2px 6px',
+                                                borderRadius: '3px'
+                                            }}>
+                                                Available to Add
+                                            </span>
+                                        )}
+                                        {meal.hasCustomIngredients && meal.quantity > 0 && (
+                                            <span style={{
+                                                marginLeft: '8px',
+                                                fontSize: '12px',
+                                                backgroundColor: '#f39c12',
+                                                color: 'white',
+                                                padding: '2px 6px',
+                                                borderRadius: '3px'
+                                            }}>
+                                                CUSTOMIZED
+                                            </span>
+                                        )}
                                         {/* {meal.hasCustomIngredients && (
                                             <span style={{
                                                 marginLeft: '8px',
@@ -704,18 +812,81 @@ export default function MealPlanViewer() {
                                 </div>
                             </div>
 
-                            {/* All your existing substitution sections */}
-                            <ProteinSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
-                            <VeggieSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
-                            <StarchSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
-                            {meal.meal !== 'Snack' && (
-                                <SauceSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+                            {/* ✅ NEW: Show note for available dishes */}
+                            {meal.quantity === 0 && (
+                                <div style={{
+                                    backgroundColor: '#e3f2fd',
+                                    border: '1px solid #bbdefb',
+                                    borderRadius: '6px',
+                                    padding: '12px',
+                                    fontSize: '14px',
+                                    color: '#1565c0'
+                                }}>
+                                    <strong>Available Dish:</strong> This dish is available for this week but not currently in your meal plan. Click + to add it to your orders!
+                                </div>
                             )}
-                            {/* <SauceSubstitutionSection order={meal} orderIndex={meal.actualIndex} /> */}
-                            <GarnishSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
 
-                            {/* Ingredients section */}
-                            {meal.meal === 'Snack' && (meal.allIngredients && meal.allIngredients.length > 0) && (
+
+                            {/* ✅ CONDITIONAL: Only show substitution options for ordered dishes (quantity > 0) */}
+                            {meal.quantity > 0 && (
+                                <>
+                                    <ProteinSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+                                    <VeggieSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+                                    <StarchSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+                                    {meal.meal !== 'Snack' && (
+                                        <SauceSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+                                    )}
+                                    <GarnishSubstitutionSection order={meal} orderIndex={meal.actualIndex} />
+
+                                    {/* Ingredients section for snacks */}
+                                    {meal.meal === 'Snack' && (meal.allIngredients && meal.allIngredients.length > 0) && (
+                                        <div>
+                                            <label style={{
+                                                display: 'block',
+                                                marginBottom: '8px',
+                                                fontSize: '14px',
+                                                fontWeight: 'bold',
+                                                color: '#555'
+                                            }}>
+                                                Ingredients (click to add/remove):
+                                            </label>
+                                            <div
+                                                className="ingredient-buttons"
+                                                style={{
+                                                    display: 'flex',
+                                                    flexWrap: 'wrap',
+                                                    gap: '8px'
+                                                }}>
+                                                {meal.allIngredients.map((ingredient, ingredientIndex) => {
+                                                    const isActive = meal.ingredients.includes(ingredient.name);
+                                                    return (
+                                                        <button
+                                                            key={ingredientIndex}
+                                                            className="ingredient-button"
+                                                            onClick={() => handleToggleIngredient(meal.actualIndex, ingredient.name, isActive)}
+                                                            disabled={saving}
+                                                            style={getIngredientButtonStyle(isActive, saving)}
+                                                            title={isActive ? `Remove ${ingredient.name}` : `Add ${ingredient.name}`}
+                                                        >
+                                                            <span style={{
+                                                                marginRight: '4px',
+                                                                fontSize: '12px'
+                                                            }}>
+                                                                {isActive ? '✓' : '+'}
+                                                            </span>
+                                                            {ingredient.name}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+
+                            {/* ✅ NEW: Show ingredients preview for available dishes */}
+                            {meal.quantity === 0 && (
                                 <div>
                                     <label style={{
                                         display: 'block',
@@ -724,36 +895,17 @@ export default function MealPlanViewer() {
                                         fontWeight: 'bold',
                                         color: '#555'
                                     }}>
-                                        Ingredients (click to add/remove):
+                                        What's included:
                                     </label>
-                                    <div
-                                        className="ingredient-buttons"
-                                        style={{
-                                            display: 'flex',
-                                            flexWrap: 'wrap',
-                                            gap: '8px'
-                                        }}>
-                                        {meal.allIngredients.map((ingredient, ingredientIndex) => {
-                                            const isActive = meal.ingredients.includes(ingredient.name);
-                                            return (
-                                                <button
-                                                    key={ingredientIndex}
-                                                    className="ingredient-button"
-                                                    onClick={() => handleToggleIngredient(meal.actualIndex, ingredient.name, isActive)}
-                                                    disabled={saving}
-                                                    style={getIngredientButtonStyle(isActive, saving)}
-                                                    title={isActive ? `Remove ${ingredient.name}` : `Add ${ingredient.name}`}
-                                                >
-                                                    <span style={{
-                                                        marginRight: '4px',
-                                                        fontSize: '12px'
-                                                    }}>
-                                                        {isActive ? '✓' : '+'}
-                                                    </span>
-                                                    {ingredient.name}
-                                                </button>
-                                            );
-                                        })}
+                                    <div style={{
+                                        fontSize: '14px',
+                                        color: '#666',
+                                        lineHeight: '1.4'
+                                    }}>
+                                        {meal.ingredients && meal.ingredients.length > 0
+                                            ? meal.ingredients.join(', ')
+                                            : 'No ingredients listed'
+                                        }
                                     </div>
                                 </div>
                             )}
