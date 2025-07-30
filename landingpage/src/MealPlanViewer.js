@@ -119,7 +119,12 @@ export default function MealPlanViewer() {
                 };
 
                 flushSync(() => {
-                    setOrders(updatedOrders);
+                    // setOrders(updatedOrders);
+                    const sorted = [
+                        ...updatedOrders.filter(order => order.quantity > 0),
+                        ...updatedOrders.filter(order => order.quantity === 0)
+                    ];
+                    setOrders(sorted);
                 });
 
                 // Update original orders to reflect saved state
@@ -153,61 +158,123 @@ export default function MealPlanViewer() {
 
 
 
-        // Update UI immediately for responsiveness
-        const updatedOrders = [...orders];
-        updatedOrders[index] = {
-            ...updatedOrders[index],
-            quantity: finalQuantity
-        };
-        flushSync(() => {
-            setOrders(updatedOrders);
-        });
-
-        // If quantity actually changed, save to Airtable
+        // Handle quantity changes
         if (finalQuantity !== oldQuantity) {
             try {
                 setSaving(true);
                 setError(null);
 
-                // ✅ EDGE CASE: Handle quantity going to 0 (remove dish)
                 if (finalQuantity === 0) {
-                    // You might want to implement a "remove dish" endpoint
-                    // For now, we'll use the existing quantity endpoint
-                    console.log('⚠️ Setting quantity to 0 - dish will be removed');
+                    // Remove the card entirely
+                    const updatedOrders = orders.filter((_, i) => i !== index);
+                    flushSync(() => {
+                        setOrders(updatedOrders);
+                    });
+
+                    await axios.patch(`/orders/${token}/quantity`, {
+                        recordId: order.recordId,
+                        newQuantity: 0,
+                        itemName: order.itemName
+                    });
+
+                } else if (finalQuantity > oldQuantity) {
+                    // INCREASE: Add duplicate cards immediately
+                    const updatedOrders = [...orders];
+                    const duplicatesToAdd = finalQuantity - oldQuantity;
+
+                    // Add placeholder cards immediately
+                    for (let i = 0; i < duplicatesToAdd; i++) {
+                        updatedOrders.push({
+                            ...order,
+                            recordId: null, // Temporary - will be updated after backend call
+                            quantity: 1,
+                            isTemporary: true // Mark as temporary
+                        });
+                    }
+
+                    flushSync(() => {
+                        // setOrders(updatedOrders);
+                        const sorted = [
+                            ...updatedOrders.filter(order => order.quantity > 0),
+                            ...updatedOrders.filter(order => order.quantity === 0)
+                        ];
+                        setOrders(sorted);
+                    });
+
+                    // Make backend call
+                    const response = await axios.patch(`/orders/${token}/quantity`, {
+                        recordId: order.recordId,
+                        newQuantity: finalQuantity,
+                        itemName: order.itemName
+                    });
+
+                    // Update the temporary cards with real record IDs
+                    const finalOrders = [...updatedOrders];
+                    const newRecordIds = response.data.newRecordIds || [];
+
+                    let tempCardIndex = 0;
+                    for (let i = 0; i < finalOrders.length; i++) {
+                        if (finalOrders[i].isTemporary) {
+                            finalOrders[i] = {
+                                ...finalOrders[i],
+                                recordId: newRecordIds[tempCardIndex],
+                                isTemporary: false
+                            };
+                            tempCardIndex++;
+                        }
+                    }
+
+                    flushSync(() => {
+                        // setOrders(finalOrders);
+                        const sorted = [
+                            ...finalOrders.filter(order => order.quantity > 0),
+                            ...finalOrders.filter(order => order.quantity === 0)
+                        ];
+                        setOrders(sorted);
+
+                    });
+
+                } else {
+                    // DECREASE: Remove cards
+                    const cardsToRemove = oldQuantity - finalQuantity;
+                    const updatedOrders = [...orders];
+
+                    // Remove cards with same dishId/meal, starting from the end
+                    for (let i = updatedOrders.length - 1; i >= 0 && cardsToRemove > 0; i--) {
+                        if (updatedOrders[i].dishId === order.dishId &&
+                            updatedOrders[i].meal === order.meal &&
+                            i !== index) {
+                            updatedOrders.splice(i, 1);
+                            cardsToRemove--;
+                        }
+                    }
+
+                    flushSync(() => {
+                        // setOrders(updatedOrders);
+                        const sorted = [
+                            ...updatedOrders.filter(order => order.quantity > 0),
+                            ...updatedOrders.filter(order => order.quantity === 0)
+                        ];
+                        setOrders(sorted);
+                    });
+
+                    await axios.patch(`/orders/${token}/quantity`, {
+                        recordId: order.recordId,
+                        newQuantity: finalQuantity,
+                        itemName: order.itemName
+                    });
                 }
 
-                // Use the new simpler endpoint
-                await axios.patch(`/orders/${token}/quantity`, {
-                    recordId: order.recordId,
-                    newQuantity: finalQuantity,
-                    itemName: order.itemName
-                });
-
-                // Update original orders to reflect saved state
-                const updatedOriginalOrders = [...originalOrders];
-                updatedOriginalOrders[index] = {
-                    ...updatedOriginalOrders[index],
-                    quantity: finalQuantity
-                };
-                setOriginalOrders(updatedOriginalOrders);
-
-                setSuccessMessage(`Updated ${order.itemName} to ${finalQuantity} serving${finalQuantity !== 1 ? 's' : ''}`);
+                setSuccessMessage(`Updated ${order.itemName} servings`);
                 setTimeout(() => setSuccessMessage(''), 2000);
 
                 if (modalRef.current) {
                     modalRef.current.scrollTop = scrollTop;
                 }
 
-
             } catch (err) {
                 // Revert UI on error
-                const revertedOrders = [...orders];
-                revertedOrders[index] = {
-                    ...revertedOrders[index],
-                    quantity: oldQuantity
-                };
-                setOrders(revertedOrders);
-
+                fetchMealPlan(); // Just refresh everything on error to be safe
                 setError(err.response?.data?.error || 'Failed to update quantity');
                 console.error('Error updating quantity:', err);
             } finally {
@@ -215,6 +282,8 @@ export default function MealPlanViewer() {
             }
         }
     };
+
+    // END OF HANDLEQUANTITYCHANGE
 
     const useScrollArrows = () => {
         const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
@@ -504,7 +573,7 @@ export default function MealPlanViewer() {
                 padding: '10px',
                 cursor: 'pointer',
                 // backgroundColor: '#fafafa',
-                backgroundColor: meal.quantity === 0 ? '#f9f9f9' : '#fafafa', // Slightly different background
+                backgroundColor: meal.isTemporary ? '#fff3cd' : (meal.quantity === 0 ? '#f9f9f9' : '#fafafa'), // ADD THIS LINE
                 transition: 'all 0.2s ease',
                 minHeight: '180px',
                 display: 'flex',
@@ -529,6 +598,21 @@ export default function MealPlanViewer() {
                     borderRadius: '4px',
                     marginBottom: '8px'
                 }} />
+            )}
+
+            {/* Add temporary indicator */}
+            {meal.isTemporary && (
+                <div style={{
+                    fontSize: '10px',
+                    color: '#856404',
+                    backgroundColor: '#fff3cd',
+                    padding: '2px 4px',
+                    borderRadius: '3px',
+                    marginBottom: '4px',
+                    textAlign: 'center'
+                }}>
+                    Saving...
+                </div>
             )}
 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -556,54 +640,6 @@ export default function MealPlanViewer() {
                         )}
                     </div>
 
-                    {/* Quantity controls */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleQuantityChange(actualIndex, Math.max(0, meal.quantity - 1));
-                            }}
-                            disabled={saving || meal.quantity <= 0}
-                            style={{
-                                width: '20px',
-                                height: '20px',
-                                border: '1px solid #ccc',
-                                borderRadius: '3px',
-                                backgroundColor: '#f8f9fa',
-                                cursor: (saving || meal.quantity <= 0) ? 'not-allowed' : 'pointer',
-                                fontSize: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}
-                        >
-                            −
-                        </button>
-                        <span style={{ fontSize: '10px', color: '#666', minWidth: '15px', textAlign: 'center' }}>
-                            {meal.quantity}
-                        </span>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleQuantityChange(actualIndex, meal.quantity + 1);
-                            }}
-                            disabled={saving}
-                            style={{
-                                width: '20px',
-                                height: '20px',
-                                border: '1px solid #ccc',
-                                borderRadius: '3px',
-                                backgroundColor: '#f8f9fa',
-                                cursor: saving ? 'not-allowed' : 'pointer',
-                                fontSize: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}
-                        >
-                            +
-                        </button>
-                    </div>
                 </div>
 
                 {/* Ingredient list at bottom */}
@@ -617,6 +653,58 @@ export default function MealPlanViewer() {
                         ? meal.ingredients.join(', ')
                         : 'No ingredients listed'
                     }
+                </div>
+
+
+                {/* Quantity controls at bottom */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '5px' }}>
+                    <span style={{ fontSize: '10px', color: '#666' }}>
+                        Qty: {meal.quantity}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuantityChange(actualIndex, Math.max(0, meal.quantity - 1));
+                            }}
+                            disabled={saving || meal.quantity <= 0}
+                            style={{
+                                padding: '2px 6px',
+                                border: '1px solid #dc3545',
+                                borderRadius: '3px',
+                                backgroundColor: '#f8f9fa',
+                                color: '#dc3545',
+                                cursor: (saving || meal.quantity <= 0) ? 'not-allowed' : 'pointer',
+                                fontSize: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            Delete
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuantityChange(actualIndex, meal.quantity + 1);
+                            }}
+                            disabled={saving}
+                            style={{
+                                padding: '2px 6px',
+                                border: '1px solid #28a745',
+                                borderRadius: '3px',
+                                backgroundColor: '#f8f9fa',
+                                color: '#28a745',
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                fontSize: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            Add
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -731,7 +819,7 @@ export default function MealPlanViewer() {
                                                 Available to Add
                                             </span>
                                         )}
-                                        {meal.hasCustomIngredients && meal.quantity > 0 && (
+                                        {/* {meal.hasCustomIngredients && meal.quantity > 0 && (
                                             <span style={{
                                                 marginLeft: '8px',
                                                 fontSize: '12px',
@@ -742,7 +830,7 @@ export default function MealPlanViewer() {
                                             }}>
                                                 CUSTOMIZED
                                             </span>
-                                        )}
+                                        )} */}
                                         {/* {meal.hasCustomIngredients && (
                                             <span style={{
                                                 marginLeft: '8px',
@@ -759,56 +847,6 @@ export default function MealPlanViewer() {
                                     {/* <div style={{ fontSize: '12px', color: '#666' }}>
                                         Per serving: {meal.calories}cal • {meal.protein}g protein • {meal.carbs}g carbs
                                     </div> */}
-                                </div>
-
-                                {/* Quantity controls */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <label style={{ fontSize: '14px', color: '#666' }}>Servings:</label>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <button
-                                            onClick={() => handleQuantityChange(meal.actualIndex, Math.max(0, meal.quantity - 1))}
-                                            disabled={saving || meal.quantity <= 0}
-                                            style={{
-                                                width: '30px',
-                                                height: '30px',
-                                                border: '1px solid #ccc',
-                                                borderRadius: '4px',
-                                                backgroundColor: '#f8f9fa',
-                                                cursor: (saving || meal.quantity <= 0) ? 'not-allowed' : 'pointer',
-                                                fontSize: '16px'
-                                            }}
-                                        >
-                                            −
-                                        </button>
-                                        <input
-                                            type="number"
-                                            value={meal.quantity}
-                                            onChange={(e) => handleQuantityChange(meal.actualIndex, parseInt(e.target.value) || 0)}
-                                            style={{
-                                                width: '60px',
-                                                padding: '5px 8px',
-                                                border: '1px solid #ccc',
-                                                borderRadius: '4px',
-                                                fontSize: '14px',
-                                                textAlign: 'center'
-                                            }}
-                                        />
-                                        <button
-                                            onClick={() => handleQuantityChange(meal.actualIndex, meal.quantity + 1)}
-                                            disabled={saving}
-                                            style={{
-                                                width: '30px',
-                                                height: '30px',
-                                                border: '1px solid #ccc',
-                                                borderRadius: '4px',
-                                                backgroundColor: '#f8f9fa',
-                                                cursor: saving ? 'not-allowed' : 'pointer',
-                                                fontSize: '16px'
-                                            }}
-                                        >
-                                            +
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
 

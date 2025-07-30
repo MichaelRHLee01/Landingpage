@@ -555,7 +555,6 @@ app.patch('/api/orders/:token', async (req, res) => {
         const customerRecords = await base('Open Orders').select({
             // filterByFormula: `ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}'`,
             filterByFormula: `SEARCH('${token}', ARRAYJOIN({To_Match_Client_Nutrition}, "")) > 0`,
-
             maxRecords: 1
         }).all();
 
@@ -608,6 +607,11 @@ app.patch('/api/orders/:token/toggle-veggie', async (req, res) => {
         const { recordId, veggieId, shouldActivate } = req.body;
 
         //console.log('🥕 Toggling veggie:', veggieId, shouldActivate ? 'ON' : 'OFF');
+        if (!recordId) {
+            return res.status(400).json({
+                error: 'Please wait for the dish to finish saving before customizing'
+            });
+        }
 
         // Get current order record
         const orderRecord = await base('Open Orders').find(recordId);
@@ -616,7 +620,7 @@ app.patch('/api/orders/:token/toggle-veggie', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients with User Edits'] || [];
 
         let currentIngredientIds = finalIngredientIds.length > 0
             ? [...finalIngredientIds]
@@ -643,7 +647,7 @@ app.patch('/api/orders/:token/toggle-veggie', async (req, res) => {
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients After User Edits': updatedIngredientIds,
+                'Final Ingredients with User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + ingredientName + ' ' + (shouldActivate ? 'added' : 'removed') + ';\n'
             }
         }]);
@@ -671,6 +675,13 @@ app.patch('/api/orders/:token/toggle-starch', async (req, res) => {
 
         //console.log('🍞 Toggling starch:', starchId, shouldActivate ? 'ON' : 'OFF');
 
+        if (!recordId) {
+            return res.status(400).json({
+                error: 'Please wait for the dish to finish saving before customizing'
+            });
+        }
+
+
         // Get current order record
         const orderRecord = await base('Open Orders').find(recordId);
         if (!orderRecord) {
@@ -678,7 +689,7 @@ app.patch('/api/orders/:token/toggle-starch', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients with User Edits'] || [];
 
         let currentIngredientIds = finalIngredientIds.length > 0
             ? [...finalIngredientIds]
@@ -719,7 +730,7 @@ app.patch('/api/orders/:token/toggle-starch', async (req, res) => {
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients After User Edits': updatedIngredientIds,
+                'Final Ingredients with User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + ingredientName + ' ' + (shouldActivate ? 'added' : 'removed') + ';\n'
             }
         }]);
@@ -767,456 +778,7 @@ app.post('/api/send-emails', async (req, res) => {
 });
 
 
-// app.get('/api/orders/:token', async (req, res) => {
-//     console.log('🚨 API REQUEST RECEIVED:', req.params.token);
-
-//     // req.setTimeout(25000, () => {
-//     //     res.status(408).json({ error: 'Request timeout - try refreshing' });
-//     // });
-
-//     try {
-//         const token = req.params.token;
-//         //console.log('Fetching orders for token:', token);
-
-//         // Step 1: Find the customer record first (with filtering to reduce data)
-//         const customerRecords = await base('Client').select({
-//             filterByFormula: `{Unique ID} = '${token}'`,
-//             maxRecords: 1
-//         }).all();
-
-//         if (!customerRecords.length) {
-//             //console.log('Customer not found for token:', token);
-//             return res.status(404).json({ error: 'Customer not found' });
-//         }
-
-//         const customerRecord = customerRecords[0];
-//         console.log('Found customer:', customerRecord.fields.First_Name, customerRecord.fields.Last_Name);
-
-//         // Step 2: Get client nutrition profile using the identifier
-//         const clientIdentifier = customerRecord.fields['identifier'];
-
-//         // Extract email from the identifier format: "Name | Meal | email@domain.com"
-//         const customerName = customerRecord.fields['First_Name'] + ' ' + customerRecord.fields['Last_Name'];
-//         const customerEmail = customerRecord.fields['TypyForm_Email'];
-
-//         console.log('Customer details:', {
-//             name: customerName,
-//             email: customerEmail,
-//             identifier: clientIdentifier
-//         });
-
-//         // console.log('🔍 Searching for ALL client records for email:', customerEmail);
-
-//         const allClientRecords = await base('Client').select({
-//             filterByFormula: `{Unique ID} = '${token}'`
-//         }).all();
-
-//         console.log('🔍 Found', allClientRecords.length, 'client records for this customer:');
-//         allClientRecords.forEach((record, i) => {
-//             console.log(`   ${i + 1}. Meal: ${record.fields['Meal']}, Identifier: ${record.fields['identifier']}`);
-//         });
-
-//         // Use the first client record for goals (they should have same nutrition goals)
-//         const clientProfile = allClientRecords[0];
-
-//         if (!clientProfile) {
-//             return res.status(400).json({
-//                 error: 'Client nutrition profile not found',
-//                 debug: { clientIdentifier, customerEmail }
-//             });
-//         }
-
-//         console.log('Using client profile for:', clientProfile.fields['First_Name'], clientProfile.fields['Last_Name'], '- Meal:', clientProfile.fields['Meal']);
-
-//         // Step 3: Get orders from ALL client records (combine all meal types)
-//         const orderRecords = await base('Open Orders').select({
-//             filterByFormula: `ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}'`,
-//         }).all();
-
-//         const orderToMealTypeMap = {}
-
-
-//         if (!orderRecords.length) {
-//             return res.json({
-//                 customer: {
-//                     name: customerRecord.fields.First_Name + ' ' + customerRecord.fields.Last_Name,
-//                     email: customerRecord.fields.Email
-//                 },
-//                 nutritionGoals: {
-//                     calories: clientProfile.fields['goal_calories'] || 0,
-//                     carbs: clientProfile.fields['goal_carbs(g)'] || 0,
-//                     protein: clientProfile.fields['goal_protein(g)'] || 0,
-//                     fat: clientProfile.fields['goal_fat(g)'] || 0,
-//                     fiber: clientProfile.fields['goal_fiber(g)'] || 0,
-//                     // allergies: clientProfile.fields['Allergies_Diet'] || [],
-//                     notes: clientProfile.fields['Notes'] || '',
-//                     snacksPerDay: clientProfile.fields['# of snacks per day'] || 0
-//                 },
-//                 currentTotals: { calories: 0, carbs: 0, protein: 0, fat: 0, fiber: 0 },
-//                 orders: [],
-//                 summary: { totalMeals: 0, calorieProgress: 0 }
-//             });
-//         }
-
-//         console.log('Successfully loaded', orderRecords.length, 'order records');
-
-//         // Step 6: Format response with nutrition awareness AND INGREDIENTS
-//         // Step 5: Get unique ingredient record IDs to resolve names
-//         const ingredientRecordIds = new Set();
-//         orderRecords.forEach(r => {
-//             // Collect ingredient IDs from both Original and Final Ingredients with User Edits
-//             if (r.fields['Final Ingredients After User Edits']) {
-//                 r.fields['Final Ingredients After User Edits'].forEach(id => ingredientRecordIds.add(id));
-//             }
-//             if (r.fields['Original Ingredients']) {
-//                 r.fields['Original Ingredients'].forEach(id => ingredientRecordIds.add(id));
-//             }
-//             orderToMealTypeMap[r.id] = r.fields['Meal Portion'];
-//         });
-
-
-//         // ✅ NEW: Pipeline 1 - Get available dishes
-//         const customerMealTypes = [...new Set(Object.values(orderToMealTypeMap))];
-//         console.log('🔍 Customer meal types:', customerMealTypes);
-
-//         // If no existing orders, infer meal types from client records
-//         if (customerMealTypes.length === 0) {
-//             allClientRecords.forEach(record => {
-//                 const meal = record.fields['Meal'];
-//                 if (meal && !customerMealTypes.includes(meal)) {
-//                     customerMealTypes.push(meal);
-//                 }
-//             });
-//         }
-
-//         // Step 6: Fetch ingredient names from Ingredients table + ALL variant ingredients
-//         const ingredientNames = {};
-//         const ingredientComponents = {};
-
-//         // First, get all variant ingredient IDs for this customer's meal types
-//         const customerMealTypes = [...new Set(Object.values(orderToMealTypeMap))];
-//         console.log('🔍 Customer meal types:', customerMealTypes);
-
-//         const allVariantsForMeals = await getCachedVariants();
-//         const variantIngredientIds = new Set();
-
-//         allVariantsForMeals.forEach(variant => {
-//             const applicableTo = variant.fields['Applicable to'] || '';
-//             const variantType = variant.fields['Variant Type'];
-
-//             // Only get variants that apply to this customer's meals
-//             const appliesToCustomerMeals = customerMealTypes.some(mealType => applicableTo.includes(mealType));
-
-//             if (appliesToCustomerMeals && (variantType === 'Veggie Substitution' || variantType === 'Starch Substitution')) {
-
-//                 const variantIngredients = variant.fields['Ingredient'] || [];
-//                 variantIngredients.forEach(id => variantIngredientIds.add(id));
-//             }
-//         });
-
-//         console.log('🔍 Found', variantIngredientIds.size, 'variant ingredients to fetch');
-
-//         // Combine order ingredients + variant ingredients
-//         const allIngredientIdsToFetch = new Set([...ingredientRecordIds, ...variantIngredientIds]);
-
-//         if (allIngredientIdsToFetch.size > 0) {
-//             try {
-//                 console.log('Fetching ingredient names for', allIngredientIdsToFetch.size, 'ingredients (orders + variants)');
-
-//                 // Fetch in batches if too many
-//                 const ingredientIdArray = Array.from(allIngredientIdsToFetch);
-//                 const batchSize = 100;
-
-//                 for (let i = 0; i < ingredientIdArray.length; i += batchSize) {
-//                     const batch = ingredientIdArray.slice(i, i + batchSize);
-
-//                     const ingredientRecords = await base('Ingredients').select({
-//                         filterByFormula: `OR(${batch.map(id => `RECORD_ID() = '${id}'`).join(',')})`,
-//                         maxRecords: batchSize
-//                     }).all();
-
-//                     ingredientRecords.forEach(record => {
-//                         const ingredientName = record.fields['Ingredient Name'] ||
-//                             record.fields['Name'] ||
-//                             record.fields['USDA Name'] ||
-//                             'Unknown Ingredient';
-
-//                         ingredientNames[record.id] = ingredientName;
-//                         ingredientComponents[record.id] = record.fields['Component'];
-//                     });
-//                 }
-
-//                 console.log('Resolved ingredient names:', Object.keys(ingredientNames).length, 'ingredients');
-//                 console.log('🥕 Veggie variants loaded:', Object.keys(ingredientComponents).filter(id => ingredientComponents[id] === 'Veggies').length);
-//             } catch (err) {
-//                 console.warn('Could not fetch ingredient names:', err.message);
-//             }
-//         }
-
-//         //STEP pre-7: sauce and garnish
-
-//         const optionsCache = {};
-//         const proteinOptionsCache = {};
-//         // const imageCache = {};
-//         console.log('🖼️ Batch fetching all images...');
-//         const uniqueDishIds = [...new Set(orderRecords.map(r => r.fields['Dish ID']).filter(Boolean))];
-//         console.log(`🖼️ Found ${uniqueDishIds.length} unique dish IDs`);
-
-//         const imageLookup = {};
-//         if (uniqueDishIds.length > 0) {
-//             try {
-//                 const imageRecords = await base('Products/ Weekly Menu').select({
-//                     filterByFormula: `OR(${uniqueDishIds.map(id => `{Internal Dish ID} = ${id}`).join(',')})`,
-//                     fields: ['Internal Dish ID', 'Product Title', 'Images (view only)']
-//                 }).all();
-
-//                 imageRecords.forEach(record => {
-//                     const dishId = record.fields['Internal Dish ID'];
-//                     const imageField = record.fields['Images (view only)'];
-//                     if (imageField && imageField[0]) {
-//                         imageLookup[dishId] = imageField[0].thumbnails?.large?.url || imageField[0].url;
-//                     }
-//                 });
-
-//                 console.log(`🖼️ ✅ Cached ${Object.keys(imageLookup).length} images`);
-//             } catch (err) {
-//                 console.warn('❌ Batch image fetch failed:', err.message);
-//             }
-//         }
-
-
-//         // Step 7: Format response with RESOLVED INGREDIENTS
-//         const orders = await Promise.all(orderRecords.map(async (r) => {
-//             const originalIngredientIds = r.fields['Original Ingredients'] || [];
-//             const finalIngredientIds = r.fields['Final Ingredients After User Edits'] || [];
-//             const currentIngredientIds = finalIngredientIds.length > 0 ? finalIngredientIds : originalIngredientIds;
-//             const ingredientsList = currentIngredientIds.map(id => ingredientNames[id] || id).filter(Boolean);
-
-
-//             const allIngredientIds = [...new Set([...originalIngredientIds, ...currentIngredientIds])];
-//             const allIngredients = allIngredientIds.map(id => ({
-//                 id,
-//                 name: ingredientNames[id] || id
-//             }));
-
-//             // NEW: Get sauce and garnish options
-//             const mealType = orderToMealTypeMap[r.id] || 'Snack';
-//             const cacheKey = `${mealType}-${currentIngredientIds.join(',')}`;
-
-//             let sauceAndGarnishOptions = optionsCache[cacheKey];
-//             if (!sauceAndGarnishOptions) {
-//                 sauceAndGarnishOptions = await getSauceAndGarnishOptions(allIngredientIds, ingredientNames, ingredientComponents, currentIngredientIds, originalIngredientIds, mealType);
-//                 optionsCache[cacheKey] = sauceAndGarnishOptions;
-//             }
-
-//             const currentProteinId = getCurrentProteinId(currentIngredientIds, ingredientComponents);
-//             const proteinCacheKey = `${currentProteinId}-${mealType}`;
-
-//             let proteinOptions = proteinOptionsCache[proteinCacheKey];
-//             if (!proteinOptions && currentProteinId) {
-//                 proteinOptions = await getProteinOptionsForOrder(currentProteinId, mealType);
-//                 proteinOptionsCache[proteinCacheKey] = proteinOptions;
-//             }
-
-
-//             const imageUrl = imageLookup[r.fields['Dish ID']] || null;
-
-
-
-
-
-//             return {
-//                 recordId: r.id,
-//                 itemName: r.fields['Airtable ItemName'] || 'Unknown Item',
-//                 quantity: r.fields['Quantity'] || 0,
-//                 email: r.fields['Email'] || customerRecord.fields['Email'],
-//                 orderSubscriptionId: r.fields['Order/ Subscription ID'],
-//                 meal: orderToMealTypeMap[r.id] || 'Snack',
-//                 nutritionNotes: r.fields['Nutrition Notes'] || '',
-
-//                 // INGREDIENTS
-//                 originalIngredients: originalIngredientIds,
-//                 finalIngredients: finalIngredientIds,
-//                 ingredients: ingredientsList,
-//                 hasCustomIngredients: finalIngredientIds.length > 0,
-
-//                 allIngredients: allIngredients,
-
-
-//                 // NEW: Add sauce and garnish options
-//                 sauceOptions: sauceAndGarnishOptions.sauceOptions,
-//                 garnishOptions: sauceAndGarnishOptions.garnishOptions,
-
-//                 veggieOptions: sauceAndGarnishOptions.veggieOptions,
-//                 starchOptions: sauceAndGarnishOptions.starchOptions,
-
-
-
-//                 // Nutrition
-//                 calories: r.fields['Calories'] || 150,
-//                 carbs: r.fields['Carbs'] || 15,
-//                 protein: r.fields['Protein'] || 5,
-//                 fat: r.fields['Fat'] || 8,
-//                 fiber: r.fields['Fiber'] || 3,
-
-//                 // allergies: (r.fields['Allergies_Diet'] || []).map(id => allergyNames[id] || id).filter(Boolean),
-
-
-//                 proteinOptions: proteinOptions || { options: [], currentProtein: null },
-//                 imageUrl: imageUrl
-
-//                 // ✅ Add image
-//                 //imageUrl
-//             };
-//         }));
-
-//         // ✅ NEW: Process available dishes (quantity 0)
-//         const availableDishesProcessed = await Promise.all(
-//             availableDishes
-//                 .filter(availableDish => {
-//                     // Only include dishes that aren't already ordered
-//                     return !orderedDishes.some(ordered =>
-//                         ordered.dishId === availableDish.dishId &&
-//                         ordered.meal === availableDish.mealType
-//                     );
-//                 })
-//                 .map(async (dish) => {
-//                     const ingredientsList = dish.ingredientIds.map(id => ingredientNames[id] || id).filter(Boolean);
-//                     const allIngredients = dish.ingredientIds.map(id => ({
-//                         id,
-//                         name: ingredientNames[id] || id
-//                     }));
-
-//                     // Get options for this available dish
-//                     const cacheKey = `${dish.mealType}-${dish.ingredientIds.join(',')}`;
-//                     let sauceAndGarnishOptions = optionsCache[cacheKey];
-//                     if (!sauceAndGarnishOptions) {
-//                         sauceAndGarnishOptions = await getSauceAndGarnishOptions(
-//                             dish.ingredientIds,
-//                             ingredientNames,
-//                             ingredientComponents,
-//                             dish.ingredientIds,
-//                             dish.ingredientIds,
-//                             dish.mealType
-//                         );
-//                         optionsCache[cacheKey] = sauceAndGarnishOptions;
-//                     }
-
-//                     const currentProteinId = getCurrentProteinId(dish.ingredientIds, ingredientComponents);
-//                     const proteinCacheKey = `${currentProteinId}-${dish.mealType}`;
-
-//                     let proteinOptions = proteinOptionsCache[proteinCacheKey];
-//                     if (!proteinOptions && currentProteinId) {
-//                         proteinOptions = await getProteinOptionsForOrder(currentProteinId, dish.mealType);
-//                         proteinOptionsCache[proteinCacheKey] = proteinOptions;
-//                     }
-
-//                     return {
-//                         recordId: null, // No record exists yet
-//                         dishId: dish.dishId,
-//                         itemName: dish.itemName,
-//                         quantity: 0, // Available but not ordered
-//                         email: customerEmail,
-//                         orderSubscriptionId: null,
-//                         meal: dish.mealType,
-//                         nutritionNotes: '',
-//                         originalIngredients: dish.ingredientIds,
-//                         finalIngredients: [],
-//                         ingredients: ingredientsList,
-//                         hasCustomIngredients: false,
-//                         allIngredients: allIngredients,
-//                         sauceOptions: sauceAndGarnishOptions.sauceOptions,
-//                         garnishOptions: sauceAndGarnishOptions.garnishOptions,
-//                         veggieOptions: sauceAndGarnishOptions.veggieOptions,
-//                         starchOptions: sauceAndGarnishOptions.starchOptions,
-//                         calories: 150, // Default values
-//                         carbs: 15,
-//                         protein: 5,
-//                         fat: 8,
-//                         fiber: 3,
-//                         proteinOptions: proteinOptions || { options: [], currentProtein: null },
-//                         imageUrl: dish.imageUrl,
-//                         isOrdered: false, // Available dish
-//                         isAvailable: true
-//                     };
-//                 })
-//         );
-
-//         const allDishes = [...orderedDishes, ...availableDishesProcessed];
-
-//         console.log(`📋 Returning ${orderedDishes.length} ordered + ${availableDishesProcessed.length} available dishes`);
-
-
-
-//         // Step 7: Include client nutrition goals and restrictions
-//         const clientGoals = {
-//             calories: clientProfile.fields['goal_calories'] || 0,
-//             carbs: clientProfile.fields['goal_carbs(g)'] || 0,
-//             protein: clientProfile.fields['goal_protein(g)'] || 0,
-//             fat: clientProfile.fields['goal_fat(g)'] || 0,
-//             fiber: clientProfile.fields['goal_fiber(g)'] || 0,
-//             // Resolve client allergies to readable names
-//             // allergies: (clientProfile.fields['Allergies_Diet'] || []).map(id => allergyNames[id] || id).filter(Boolean),
-//             notes: clientProfile.fields['Notes'] || '',
-//             snacksPerDay: clientProfile.fields['# of snacks per day'] || 0
-//         };
-
-//         // Calculate current nutrition totals
-//         const currentTotals = orders.reduce((totals, order) => ({
-//             calories: totals.calories + (order.calories * order.quantity),
-//             carbs: totals.carbs + (order.carbs * order.quantity),
-//             protein: totals.protein + (order.protein * order.quantity),
-//             fat: totals.fat + (order.fat * order.quantity),
-//             fiber: totals.fiber + (order.fiber * order.quantity)
-//         }), { calories: 0, carbs: 0, protein: 0, fat: 0, fiber: 0 });
-
-//         const response = {
-//             customer: {
-//                 name: customerRecord.fields.First_Name + ' ' + customerRecord.fields.Last_Name,
-//                 email: customerEmail
-//             },
-//             nutritionGoals: clientGoals,
-//             currentTotals: currentTotals,
-//             orders: orders,
-//             summary: {
-//                 totalMeals: orders.length,
-//                 calorieProgress: clientGoals.calories > 0 ? (currentTotals.calories / clientGoals.calories * 100).toFixed(1) : 0
-//             }
-//         };
-
-//         // console.log('🔍 Customer meal types:', customerMealTypes);
-//         // console.log('🔍 Total variants:', allVariantsForMeals.length);
-//         // console.log('🔍 Variant ingredient IDs to fetch:', variantIngredientIds.size);
-//         // console.log('🔍 Combined with order ingredients:', allIngredientIdsToFetch.size);
-
-
-//         // console.log('Returning optimized response with', orders.length, 'orders and ingredients');
-
-
-//         // res.setHeader('Content-Type', 'application/json');
-//         // res.setHeader('Content-Length', JSON.stringify(response).length);
-
-//         // res.writeHead(200, { 'Content-Type': 'application/json' });
-//         // res.end(JSON.stringify(response));
-
-
-
-//         // console.log('🎯 About to send response...');
-//         // console.log('Response size:', JSON.stringify(response).length);
-//         // console.log('Response keys:', Object.keys(response));
-
-
-
-
-//         res.json(response);
-//         console.log('✅ Response sent successfully!');
-
-//     } catch (error) {
-//         console.error('Error fetching orders:', error);
-//         res.status(500).json({ error: 'Internal server error', details: error.message });
-//     }
-// });
-
+// Main GET endpoint with zero-quantity filtering
 app.get('/api/orders/:token', async (req, res) => {
     console.log('🚨 API REQUEST RECEIVED:', req.params.token);
 
@@ -1426,9 +988,9 @@ app.get('/api/orders/:token', async (req, res) => {
         // Step 5: Get unique ingredient record IDs to resolve names
         const ingredientRecordIds = new Set();
         orderRecords.forEach(r => {
-            // Collect ingredient IDs from both Original and Final Ingredients After User Edits
-            if (r.fields['Final Ingredients After User Edits']) {
-                r.fields['Final Ingredients After User Edits'].forEach(id => ingredientRecordIds.add(id));
+            // Collect ingredient IDs from both Original and Final Ingredients with User Edits
+            if (r.fields['Final Ingredients with User Edits']) {
+                r.fields['Final Ingredients with User Edits'].forEach(id => ingredientRecordIds.add(id));
             }
             if (r.fields['Original Ingredients']) {
                 r.fields['Original Ingredients'].forEach(id => ingredientRecordIds.add(id));
@@ -1551,7 +1113,7 @@ app.get('/api/orders/:token', async (req, res) => {
         // Step 9: Format response with RESOLVED INGREDIENTS
         const orderedDishes = await Promise.all(orderRecords.map(async (r) => {
             const originalIngredientIds = r.fields['Original Ingredients'] || [];
-            const finalIngredientIds = r.fields['Final Ingredients After User Edits'] || [];
+            const finalIngredientIds = r.fields['Final Ingredients with User Edits'] || [];
             const currentIngredientIds = finalIngredientIds.length > 0 ? finalIngredientIds : originalIngredientIds;
             const ingredientsList = currentIngredientIds.map(id => ingredientNames[id] || id).filter(Boolean);
 
@@ -1745,6 +1307,12 @@ app.patch('/api/orders/:token/replace-protein', async (req, res) => {
         const token = req.params.token;
         const { recordId, newProteinId, oldProteinId, upgradePrice = 0 } = req.body;
 
+        if (!recordId) {
+            return res.status(400).json({
+                error: 'Please wait for the dish to finish saving before customizing'
+            });
+        }
+
         console.log('🥩 Replacing protein:', oldProteinId, '->', newProteinId, upgradePrice > 0 ? `(+$${upgradePrice})` : '');
 
         // Verify customer exists
@@ -1764,7 +1332,7 @@ app.patch('/api/orders/:token/replace-protein', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients with User Edits'] || [];
 
         // Use Final Ingredients with User Edits if exists, otherwise copy from Original
         let currentIngredientIds = finalIngredientIds.length > 0
@@ -1793,7 +1361,7 @@ app.patch('/api/orders/:token/replace-protein', async (req, res) => {
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients After User Edits': updatedIngredientIds,
+                'Final Ingredients with User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + logEntry + ';\n'
             }
         }]);
@@ -1823,6 +1391,12 @@ app.patch('/api/orders/:token/ingredients/toggle', async (req, res) => {
         const token = req.params.token;
         const { recordId, ingredientName, shouldActivate } = req.body;
 
+        if (!recordId) {
+            return res.status(400).json({
+                error: 'Please wait for the dish to finish saving before customizing'
+            });
+        }
+
         console.log('🔄 Toggling ingredient:', ingredientName, shouldActivate ? 'ON' : 'OFF');
 
         // Verify customer exists
@@ -1842,7 +1416,7 @@ app.patch('/api/orders/:token/ingredients/toggle', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients with User Edits'] || [];
 
         // Get current active ingredients (final if exists, otherwise original)
         const currentActiveIds = finalIngredientIds.length > 0 ? finalIngredientIds : [...originalIngredientIds];
@@ -1886,7 +1460,7 @@ app.patch('/api/orders/:token/ingredients/toggle', async (req, res) => {
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients After User Edits': updatedIngredientIds
+                'Final Ingredients with User Edits': updatedIngredientIds
             }
         }]);
 
@@ -1936,18 +1510,18 @@ app.patch('/api/orders/:token/ingredients', async (req, res) => {
             return res.status(404).json({ error: 'Order not found' });
         }
 
-        // Get current ingredient IDs (linked records) - PRIORITIZE Final Ingredients after User Edits
+        // Get current ingredient IDs (linked records) - PRIORITIZE Final Ingredients with User Edits
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients with User Edits'] || [];
 
-        // Use Final Ingredients after User Edits if exists, otherwise copy from Original to start customization
+        // Use Final Ingredients with User Edits if exists, otherwise copy from Original to start customization
         let currentIngredientIds;
         if (finalIngredientIds.length > 0) {
             currentIngredientIds = finalIngredientIds;
-            console.log('Using existing Final Ingredients After User Edits:', currentIngredientIds);
+            console.log('Using existing Final Ingredients with User Edits:', currentIngredientIds);
         } else {
             currentIngredientIds = [...originalIngredientIds]; // Copy original to start customizing
-            console.log('Copying Original to Final Ingredients After User Edits:', currentIngredientIds);
+            console.log('Copying Original to Final Ingredients with User Edits:', currentIngredientIds);
         }
 
         // Find which ingredient ID corresponds to the name we want to delete
@@ -1977,16 +1551,16 @@ app.patch('/api/orders/:token/ingredients', async (req, res) => {
 
         console.log('Updated ingredient IDs:', updatedIngredientIds);
         const customerEdits = orderRecord.fields['Customer Edits'] || '';
-        // Update the Final Ingredients after User Edits field with the modified list of IDs
+        // Update the Final Ingredients with User Edits field with the modified list of IDs
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients After User Edits': updatedIngredientIds,
+                'Final Ingredients with User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + ingredientName + ' ' + (shouldActivate ? 'added' : 'removed') + ';\n'
             }
         }]);
 
-        console.log('Successfully updated Final Ingredients after User Edits in Airtable');
+        console.log('Successfully updated Final Ingredients with User Edits in Airtable');
 
         // Return updated ingredient names for frontend
         const updatedIngredientNames = ingredientsWithNames
@@ -2060,57 +1634,115 @@ app.patch('/api/orders/:token/quantity', async (req, res) => {
                 newQuantity: 0,
                 deleted: true
             });
-        } else {
-            // Update quantity normally
-            const customerEdits = orderRecord.fields['Customer Edits'] || '';
+        } else if (quantity > oldQuantity) {
+            // ✅ INCREASE: Create new rows for each additional serving (1→2, 2→3, etc.)
+            console.log(`📈 Creating ${quantity - oldQuantity} new rows for quantity increase`);
 
-            await base('Open Orders').update([{
-                id: recordId,
-                fields: {
-                    'Quantity': quantity,
-                    'Customer Edits': customerEdits +
-                        `${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} - ${itemName || 'Item'} quantity updated from ${oldQuantity} to ${quantity};\n`
-                }
-            }]);
+            const newRecords = [];
+            for (let i = 0; i < (quantity - oldQuantity); i++) {
+                newRecords.push({
+                    fields: {
+                        'Order/ Subscription ID': orderRecord.fields['Order/ Subscription ID'],
+                        'Quantity': 1, // Each new row represents 1 serving
+                        'Source': 'Subscription Landing Page',
+                        'Selected Protein': orderRecord.fields['Selected Protein'],
+                        'SquareSpace/ Internal OrderItem ID': orderRecord.fields['SquareSpace/ Internal OrderItem ID'],
+                        'Meal Portion': orderRecord.fields['Meal Portion'],
+                        'To_Match_Client_Nutrition': orderRecord.fields['To_Match_Client_Nutrition'],
+                        'Airtable ItemName': orderRecord.fields['Airtable ItemName'],
+                        'Order Placed/ Algo Ran At': new Date().toISOString().split('T')[0],
+                        'Delivery Date': orderRecord.fields['Delivery Date'],
+                        'Dish ID': orderRecord.fields['Dish ID'],
+                        'Original Ingredients': orderRecord.fields['Original Ingredients'],
+                        'Final Ingredients with User Edits': orderRecord.fields['Final Ingredients with User Edits'],
+                        'Run LLM Review& Subsitutions': true,
+                        'Customer Edits': customerEdits + `${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} - ${itemName} quantity increased (${oldQuantity}→${quantity});\n`,
+                        'Customer Name': orderRecord.fields['Customer Name'] // Preserve customer name
+                    }
+                });
+            }
 
-            console.log('✅ Successfully updated quantity');
+            // Create all new records at once
+            const createdRecords = await base('Open Orders').create(newRecords);
+
+            // Extract the new record IDs
+            const newRecordIds = createdRecords.map(record => record.id);
+
+
+            console.log('✅ Successfully created', newRecords.length, 'new order records');
 
             res.json({
                 success: true,
-                message: `Updated ${itemName || 'item'} quantity to ${quantity}`,
+                message: `Added ${quantity - oldQuantity} more serving${quantity - oldQuantity !== 1 ? 's' : ''} of ${itemName}`,
+                recordId: recordId,
+                newQuantity: quantity,
+                newRecordsCreated: newRecords.length,
+                allRecordIds: [recordId, ...newRecordIds],
+                newRecordIds: newRecordIds
+            });
+        } else if (quantity < oldQuantity) {
+            // ✅ DECREASE: Delete some records (3→2, 2→1, etc.)
+            console.log(`📉 Need to delete ${oldQuantity - quantity} records for quantity decrease`);
+
+            // Find all records for this dish/customer/meal combo
+            const allRecordsForDish = await base('Open Orders').select({
+                filterByFormula: `AND(
+                    ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}',
+                    {Dish ID} = ${orderRecord.fields['Dish ID']},
+                    {Meal Portion} = '${orderRecord.fields['Meal Portion']}',
+                    {Quantity} > 0
+                )`
+            }).all();
+
+            // Delete the excess records (keep the ones we want)
+            const recordsToDelete = allRecordsForDish
+                .slice(quantity) // Keep first 'quantity' records, delete the rest
+                .map(r => r.id);
+
+            if (recordsToDelete.length > 0) {
+                await base('Open Orders').destroy(recordsToDelete);
+            }
+
+            console.log('✅ Successfully deleted', recordsToDelete.length, 'excess records');
+
+            res.json({
+                success: true,
+                message: `Removed ${oldQuantity - quantity} serving${oldQuantity - quantity !== 1 ? 's' : ''} of ${itemName}`,
+                recordId: recordId,
+                newQuantity: quantity,
+                recordsDeleted: recordsToDelete.length
+            });
+        } else {
+            // No change in quantity
+            res.json({
+                success: true,
+                message: 'No quantity change needed',
                 recordId: recordId,
                 newQuantity: quantity
             });
         }
 
-        // if (oldQuantity > 0) {
-        //     await base('Open Orders').create([{
+
+        // else {
+        //     // Update quantity normally
+        //     const customerEdits = orderRecord.fields['Customer Edits'] || '';
+
+        //     await base('Open Orders').update([{
+        //         id: recordId,
         //         fields: {
-        //             'Order/ Subscription ID': orderRecord.fields['Order/ Subscription ID'],
-        //             'Quantity': 1,
-        //             'Source': 'Subscription Landing Page',
-        //             'Selected Protein': orderRecord.fields['Selected Protein'],
-        //             'SquareSpace/ Internal OrderItem ID': orderRecord.fields['SquareSpace/ Internal OrderItem ID'],
-        //             'Meal Portion': orderRecord.fields['Meal Portion'],
-        //             'To_Match_Client_Nutrition': orderRecord.fields['To_Match_Client_Nutrition'],
-        //             'Airtable ItemName': orderRecord.fields['Airtable ItemName'],
-        //             'Order Placed/ Algo Ran At': new Date().toISOString().split('T')[0],
-        //             'Delivery Date': orderRecord.fields['Delivery Date'],
-        //             'Dish ID': orderRecord.fields['Dish ID'],
-        //             'Final Ingredients After User Edits': orderRecord.fields['Final Ingredients After User Edits'],
-        //             'Run LLM Review& Subsitutions': true,
-        //             'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + itemName + ' quantity updated from ' + oldQuantity + ' to ' + newQuantity + ';\n'
+        //             'Quantity': quantity,
+        //             'Customer Edits': customerEdits +
+        //                 `${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} - ${itemName || 'Item'} quantity updated from ${oldQuantity} to ${quantity};\n`
         //         }
         //     }]);
-
 
         //     console.log('✅ Successfully updated quantity');
 
         //     res.json({
         //         success: true,
-        //         message: `Updated ${itemName} quantity from ${oldQuantity} to ${newQuantity}`,
+        //         message: `Updated ${itemName || 'item'} quantity to ${quantity}`,
         //         recordId: recordId,
-        //         newQuantity: parseInt(newQuantity) || 0
+        //         newQuantity: quantity
         //     });
         // }
 
@@ -2129,6 +1761,12 @@ app.patch('/api/orders/:token/replace-sauce', async (req, res) => {
         const token = req.params.token;
         const { recordId, newSauceId, oldSauceId } = req.body;
 
+        if (!recordId) {
+            return res.status(400).json({
+                error: 'Please wait for the dish to finish saving before customizing'
+            });
+        }
+
         console.log('🍶 Replacing sauce:', oldSauceId, '->', newSauceId);
 
         // Get current order record
@@ -2138,24 +1776,12 @@ app.patch('/api/orders/:token/replace-sauce', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients with User Edits'] || [];
 
         let currentIngredientIds = finalIngredientIds.length > 0
             ? [...finalIngredientIds]
             : [...originalIngredientIds];
 
-        // // Remove all current sauce ingredients
-        // const updatedIngredientIds = [];
-        // for (const ingredientId of currentIngredientIds) {
-        //     try {
-        //         const ingredient = await base('Ingredients').find(ingredientId);
-        //         if (ingredient.fields['Component'] !== 'Sauce') {
-        //             updatedIngredientIds.push(ingredientId); // Keep non-sauce ingredients
-        //         }
-        //     } catch (err) {
-        //         updatedIngredientIds.push(ingredientId); // Keep if can't check component
-        //     }
-        // }
 
         // Cache components for all ingredients first
         await cacheIngredientComponents(currentIngredientIds);
@@ -2179,11 +1805,11 @@ app.patch('/api/orders/:token/replace-sauce', async (req, res) => {
         const oldSauceName = await getIngredientName(oldSauceId);
         const newSauceName = await getIngredientName(newSauceId);
 
-        // Update Final Ingredients After User Edits
+        // Update Final Ingredients with User Edits
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients After User Edits': updatedIngredientIds,
+                'Final Ingredients with User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + oldSauceName + ' replaced with ' + newSauceName + ';\n'
             }
         }]);
@@ -2211,6 +1837,12 @@ app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
 
         console.log('🌿 Toggling garnish:', garnishId, shouldActivate ? 'ON' : 'OFF');
 
+        if (!recordId) {
+            return res.status(400).json({
+                error: 'Please wait for the dish to finish saving before customizing'
+            });
+        }
+
         // Get current order record
         const orderRecord = await base('Open Orders').find(recordId);
         if (!orderRecord) {
@@ -2218,7 +1850,7 @@ app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
         }
 
         const originalIngredientIds = orderRecord.fields['Original Ingredients'] || [];
-        const finalIngredientIds = orderRecord.fields['Final Ingredients After User Edits'] || [];
+        const finalIngredientIds = orderRecord.fields['Final Ingredients with User Edits'] || [];
 
         let currentIngredientIds = finalIngredientIds.length > 0
             ? [...finalIngredientIds]
@@ -2241,11 +1873,11 @@ app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
         // Get ingredient name for logging
         const ingredientName = await getIngredientName(garnishId);
 
-        // Update Final Ingredients after User Edits
+        // Update Final Ingredients with User Edits
         await base('Open Orders').update([{
             id: recordId,
             fields: {
-                'Final Ingredients After User Edits': updatedIngredientIds,
+                'Final Ingredients with User Edits': updatedIngredientIds,
                 'Customer Edits': customerEdits + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' - ' + ingredientName + ' ' + (shouldActivate ? 'added' : 'removed') + ';\n'
             }
         }]);
@@ -2264,186 +1896,6 @@ app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
         });
     }
 });
-
-
-// // ✅ NEW: Pipeline 2 - Add dish endpoint (0→1 quantity)
-// app.post('/api/orders/:token/add-dish', async (req, res) => {
-//     try {
-//         const token = req.params.token;
-//         const { dishId, mealType } = req.body;
-
-//         console.log('🍽️ Adding new dish:', dishId, mealType, 'for token:', token);
-
-//         if (!dishId || !mealType) {
-//             return res.status(400).json({ error: 'dishId and mealType are required' });
-//         }
-
-//         // Verify customer exists
-//         const customerRecords = await base('Client').select({
-//             filterByFormula: `{Unique ID} = '${token}'`,
-//             maxRecords: 1
-//         }).all();
-
-//         if (!customerRecords.length) {
-//             return res.status(404).json({ error: 'Customer not found' });
-//         }
-
-//         // Add this right before the existing query in the POST endpoint:
-//         console.log('🔍 Debugging Dishes table...');
-
-//         // First, let's see ALL dishes with ID 1038
-//         const allDishesWithId = await base('Dishes').select({
-//             filterByFormula: `{Dish ID} = ${dishId}`,
-//             fields: ['Dish ID', 'Type of Meal', 'Ingredient']
-//         }).all();
-
-//         console.log(`Found ${allDishesWithId.length} records with Dish ID ${dishId}:`);
-//         allDishesWithId.forEach((record, i) => {
-//             console.log(`  ${i + 1}. Type of Meal: "${record.fields['Type of Meal']}", Ingredients: ${record.fields['Ingredient']?.length || 0}`);
-//         });
-
-//         // Next, let's see what meal types exist
-//         const allMealTypes = await base('Dishes').select({
-//             fields: ['Type of Meal'],
-//             maxRecords: 20
-//         }).all();
-
-//         const uniqueMealTypes = [...new Set(allMealTypes.map(r => r.fields['Type of Meal']))];
-//         console.log('All meal types in Dishes table:', uniqueMealTypes);
-
-
-//         // Get ingredients for this dish
-//         // const dishIngredients = await base('Dishes').select({
-//         //     filterByFormula: `AND({Dish ID} = ${dishId}, {Type of Meal} = '${mealType}')`,
-//         //     fields: ['Ingredient']
-//         // }).all();
-
-//         const dishIngredients = await base('Dishes').select({
-//             filterByFormula: `AND({Dish ID} = ${dishId}, FIND('${mealType}', {Type of Meal}) > 0)`,
-//             fields: ['Ingredient']
-//         }).all();
-
-
-//         console.log('🔍 Debug dish ingredients query:');
-//         console.log('  Dish ID:', dishId);
-//         console.log('  Meal Type:', mealType);
-//         console.log('  Found ingredients records:', dishIngredients.length);
-//         console.log('  Raw records:', dishIngredients.map(r => r.fields));
-
-//         const ingredientIds = dishIngredients
-//             .map(record => record.fields['Ingredient'])
-//             .flat()
-//             .filter(Boolean);
-
-//         if (ingredientIds.length === 0) {
-//             return res.status(404).json({ error: 'No ingredients found for this dish' });
-//         }
-
-//         console.log('🍽️ Found', ingredientIds.length, 'ingredients for dish');
-
-//         // Cache ingredient components for protein detection
-//         await cacheIngredientComponents(ingredientIds);
-//         const ingredientComponents = CACHED_INGREDIENT_COMPONENTS;
-
-//         // Get reference data from existing orders for this user + meal type
-//         const existingOrders = await base('Open Orders').select({
-//             filterByFormula: `AND(
-//                 ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}',
-//                 {Meal Portion} = '${mealType}'
-//             )`,
-//             maxRecords: 1
-//         }).all();
-
-//         let orderSubscriptionId, toMatchClientNutrition, deliveryDate;
-
-//         if (existingOrders.length > 0) {
-//             // Use existing reference data
-//             const referenceOrder = existingOrders[0];
-//             orderSubscriptionId = referenceOrder.fields['Order/ Subscription ID'];
-//             toMatchClientNutrition = referenceOrder.fields['To_Match_Client_Nutrition'];
-//             deliveryDate = referenceOrder.fields['Delivery Date'];
-//         } else {
-//             // Fallback: try to get from any order for this user
-//             const anyExistingOrder = await base('Open Orders').select({
-//                 filterByFormula: `ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}'`,
-//                 maxRecords: 1
-//             }).all();
-
-//             if (anyExistingOrder.length > 0) {
-//                 const customerRecord = customerRecords[0];
-//                 const customerName = customerRecord.fields['First_Name'] + ' ' + customerRecord.fields['Last_Name'];
-//                 const customerEmail = customerRecord.fields['TypyForm_Email'];
-
-//                 // Generate new Order/Subscription ID (you might want to implement proper logic here)
-//                 orderSubscriptionId = Math.floor(Math.random() * 1000) + 100; // Temporary logic
-//                 toMatchClientNutrition = `${customerName} | ${mealType} | ${customerEmail}`;
-//                 deliveryDate = anyExistingOrder[0].fields['Delivery Date'];
-//             } else {
-//                 return res.status(400).json({ error: 'No reference orders found for this customer' });
-//             }
-//         }
-
-//         // Generate next SquareSpace ID
-//         const squareSpaceId = await generateNextSquareSpaceId(token, mealType);
-
-//         // Get selected protein
-//         const selectedProtein = await getSelectedProteinFromIngredients(ingredientIds, ingredientComponents);
-
-//         // Get dish name from Weekly Menu
-//         const weeklyMenuItem = await base('Products/ Weekly Menu').select({
-//             filterByFormula: `{Internal Dish ID} = ${dishId}`,
-//             fields: ['Airtable ItemName'],
-//             maxRecords: 1
-//         }).all();
-
-//         const itemName = weeklyMenuItem.length > 0
-//             ? weeklyMenuItem[0].fields['Airtable ItemName']
-//             : `Dish ${dishId}`;
-
-//         // Create the new order record
-//         console.log('🍽️ Creating new order record...');
-
-//         const newOrderRecord = await base('Open Orders').create([{
-//             fields: {
-//                 'Order/ Subscription ID': orderSubscriptionId,
-//                 'Quantity': 1,
-//                 'Source': 'Subscription Landing Page',
-//                 'Selected Protein': selectedProtein,
-//                 'SquareSpace/ Internal OrderItem ID': squareSpaceId,
-//                 'Meal Portion': mealType,
-//                 'To_Match_Client_Nutrition': [toMatchClientNutrition], // This might be a linked field
-//                 'Airtable ItemName': itemName,
-//                 'Order Placed/ Algo Ran At': new Date().toISOString().split('T')[0],
-//                 'Delivery Date': deliveryDate,
-//                 'Dish ID': dishId,
-//                 'Original Ingredients': ingredientIds,
-//                 'Ingredients to Recommend': ingredientIds, // Same as original for now
-//                 'Final Ingredients After User Edits': ingredientIds, // Same as original for now
-//                 'Run LLM Review& Subsitutions': true,
-//                 'Customer Edits': `${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} - ${itemName} added (quantity 0→1);\n`
-//             }
-//         }]);
-
-//         console.log('✅ Successfully created new order record:', newOrderRecord[0].id);
-
-//         res.json({
-//             success: true,
-//             message: `Added ${itemName} to your ${mealType.toLowerCase()} orders`,
-//             recordId: newOrderRecord[0].id,
-//             dishId: dishId,
-//             itemName: itemName,
-//             quantity: 1,
-//             squareSpaceId: squareSpaceId
-//         });
-
-//     } catch (error) {
-//         console.error('❌ Error adding dish:', error);
-//         res.status(500).json({
-//             error: 'Failed to add dish',
-//             details: error.message
-//         });
-//     }
-// });
 
 
 // Replace your existing POST /api/orders/:token/add-dish endpoint with this fixed version:
@@ -2638,8 +2090,8 @@ app.post('/api/orders/:token/add-dish', async (req, res) => {
                 'Delivery Date': deliveryDate,
                 'Dish ID': dishId,
                 'Original Ingredients': ingredientIds,
-                'Ingredients to Recommend': ingredientIds,
-                'Final Ingredients After User Edits': ingredientIds,
+                'Ingredients To Recommend': ingredientIds,
+                'Final Ingredients with User Edits': ingredientIds,
                 'Run LLM Review& Subsitutions': true,
                 'Customer Edits': `${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} - ${itemName} added (quantity 0→1);\n`,
                 'Customer Name': customerFullName
