@@ -785,6 +785,9 @@ app.get('/api/orders/:token', async (req, res) => {
     try {
         const token = req.params.token;
 
+
+
+
         // Step 1: Find the customer record first (with filtering to reduce data)
         const customerRecords = await base('Client').select({
             filterByFormula: `{Unique ID} = '${token}'`,
@@ -999,6 +1002,7 @@ app.get('/api/orders/:token', async (req, res) => {
         });
 
         // Step 6: Pipeline 1 - Get available dishes
+        // FIXED: for ALL meal types
         const customerMealTypes = [...new Set(Object.values(orderToMealTypeMap))];
         console.log('🔍 Customer meal types:', customerMealTypes);
 

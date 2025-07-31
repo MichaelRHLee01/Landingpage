@@ -166,9 +166,26 @@ export default function MealPlanViewer() {
 
                 if (finalQuantity === 0) {
                     // Remove the card entirely
-                    const updatedOrders = orders.filter((_, i) => i !== index);
+                    // const updatedOrders = orders.filter((_, i) => i !== index);
+                    // flushSync(() => {
+                    //     setOrders(updatedOrders);
+                    // });
+
+                    const updatedOrders = [...orders];
+                    updatedOrders[index] = {
+                        ...updatedOrders[index],
+                        quantity: 0,
+                        recordId: null,
+                        isOrdered: false,
+                        hasCustomIngredients: false
+                    };
+
                     flushSync(() => {
-                        setOrders(updatedOrders);
+                        const sorted = [
+                            ...updatedOrders.filter(order => order.quantity > 0),
+                            ...updatedOrders.filter(order => order.quantity === 0)
+                        ];
+                        setOrders(sorted);
                     });
 
                     await axios.patch(`/orders/${token}/quantity`, {
