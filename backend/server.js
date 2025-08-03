@@ -1016,8 +1016,10 @@ app.get('/api/orders/:token', async (req, res) => {
             });
         }
 
-        // Get available dishes using the meal types
-        const availableDishes = await getAvailableDishes(customerMealTypes);
+        // ALWAYS get available dishes for all meal types, not just customer's subscription
+        const allMealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+        const availableDishes = await getAvailableDishes(allMealTypes);
+
 
         // Step 7: Fetch ingredient names from Ingredients table + ALL variant ingredients
         const ingredientNames = {};

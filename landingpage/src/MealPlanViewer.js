@@ -396,6 +396,18 @@ export default function MealPlanViewer() {
     }, [orders]);
 
 
+    // For page name:
+    useEffect(() => {
+        if (mealPlanData?.customer?.name) {
+            document.title = `Square Fare for ${mealPlanData.customer.name}`;
+        } else if (!loading) {
+            document.title = 'Weekly Orders';
+        }
+    }, [mealPlanData?.customer?.name, loading]);
+
+
+
+
 
     // const handleProteinSubstitution = async (orderIndex, newProteinId, oldProteinId) => {
 
@@ -584,7 +596,8 @@ export default function MealPlanViewer() {
         <div
             onClick={() => openModal(meal, actualIndex)}
             style={{
-                border: meal.quantity === 0 ? '2px dashed #ccc' : '1px solid #ddd', // Dashed border for available dishes
+                position: 'relative',
+                border: meal.quantity === 0 ? '2px dashed #ccc' : '1px solid #333', // Dashed border for available dishes
                 // border: '1px solid #ddd',
                 borderRadius: '8px',
                 padding: '10px',
@@ -608,7 +621,8 @@ export default function MealPlanViewer() {
             {meal.imageUrl && (
                 <div style={{
                     width: '100%',
-                    height: '150px',
+                    // height: '150px',
+                    aspectRatio: '1 / 1',
                     backgroundImage: `url(${meal.imageUrl})`,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
@@ -616,6 +630,7 @@ export default function MealPlanViewer() {
                     marginBottom: '8px'
                 }} />
             )}
+
 
             {/* Add temporary indicator */}
             {meal.isTemporary && (
@@ -638,9 +653,17 @@ export default function MealPlanViewer() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'flex-start',
-                    marginBottom: '8px'
+                    marginBottom: '8px',
+                    flexWrap: 'wrap', // Allow wrapping when content is too long
+                    gap: '4px' // Small gap between wrapped items
+
                 }}>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', flex: 1 }}>
+                    <div style={{
+                        fontSize: '14px', // Increased from 12px
+                        fontWeight: 'bold',
+                        flex: '1 1 auto', // Allow shrinking and growing
+                        minWidth: '0' // Allow text to wrap
+                    }}>
                         {meal.itemName}
                         {meal.quantity === 0 && (
                             <span style={{
@@ -656,6 +679,20 @@ export default function MealPlanViewer() {
                             </span>
                         )}
                     </div>
+
+                    {/* Edit indicator - same approach as Add/Remove buttons */}
+                    {meal.quantity > 0 && (
+                        <div style={{
+                            fontSize: '13px',
+                            color: '#007bff',
+                            fontWeight: 'bold',
+                            textDecoration: 'underline',
+                            pointerEvents: 'none',
+                            flexShrink: 0
+                        }}>
+                            EDIT
+                        </div>
+                    )}
 
                 </div>
 
@@ -698,7 +735,7 @@ export default function MealPlanViewer() {
                                 justifyContent: 'center'
                             }}
                         >
-                            Delete
+                            Remove
                         </button>
                         <button
                             onClick={(e) => {
@@ -723,6 +760,7 @@ export default function MealPlanViewer() {
                         </button>
                     </div>
                 </div>
+
             </div>
         </div>
     );
