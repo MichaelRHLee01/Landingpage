@@ -63,6 +63,32 @@ const cacheIngredientComponents = async (ingredientIds) => {
     }
 };
 
+const getCustomerSubscriptions = async (customerName) => {
+    try {
+        const subscriptionRecords = await base('Subscriptions').select({
+            filterByFormula: `{Customer Name} = '${customerName}'`,
+            fields: ['Meal', '# of Meals Included']
+        }).all();
+
+        console.log('Raw subscription records:', subscriptionRecords.map(r => ({
+            meal: r.fields['Meal'],
+            mealsIncluded: r.fields['# of Meals Included']
+        })));
+
+        const subscriptions = subscriptionRecords.map(record => ({
+            meal: record.fields['Meal'],
+            mealsIncluded: record.fields['# of Meals Included'] || 0
+        }));
+
+        console.log('Processed subscriptions:', subscriptions);
+        return subscriptions;
+
+    } catch (error) {
+        console.warn('Could not fetch subscription data:', error);
+        return [];
+    }
+};
+
 
 const getSauceAndGarnishOptions = async (allIngredientIds, ingredientNames, ingredientComponents, currentIngredientIds, originalIngredientIds, mealType) => {
 
@@ -1293,6 +1319,8 @@ app.get('/api/orders/:token', async (req, res) => {
             nutritionGoals: clientGoals,
             currentTotals: currentTotals,
             orders: allDishes, // Now includes both ordered + available
+            //Subscription data
+            subscriptions: await getCustomerSubscriptions(customerName),
             summary: {
                 totalMeals: orderedDishes.length, // Only count ordered meals
                 calorieProgress: clientGoals.calories > 0 ? (currentTotals.calories / clientGoals.calories * 100).toFixed(1) : 0
