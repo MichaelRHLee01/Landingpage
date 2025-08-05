@@ -29,6 +29,12 @@ export default function MealPlanViewer() {
     const containerRef = useRef(null);
     const [containerWidth, setContainerWidth] = useState(0);
 
+    //New states added for the sake of tabs
+    const [deliveryDates, setDeliveryDates] = useState([]);
+    const [selectedDeliveryDate, setSelectedDeliveryDate] = useState(null);
+    const [ordersByDeliveryDate, setOrdersByDeliveryDate] = useState({});
+
+
     // Measure container width on mount and resize
     useEffect(() => {
         const measureContainer = () => {
@@ -81,8 +87,35 @@ export default function MealPlanViewer() {
             const response = await axios.get(`/orders/${token}`);
 
             setMealPlanData(response.data);
-            setOrders(response.data.orders || []);
-            setOriginalOrders(JSON.parse(JSON.stringify(response.data.orders || []))); // Deep copy
+
+            // Group orders by delivery date
+            const groupedOrders = {};
+            const allDeliveryDates = new Set();
+
+            response.data.orders.forEach(order => {
+                const deliveryDate = order.deliveryDate || 'No Date';
+                allDeliveryDates.add(deliveryDate);
+
+                if (!groupedOrders[deliveryDate]) {
+                    groupedOrders[deliveryDate] = [];
+                }
+                groupedOrders[deliveryDate].push(order);
+            });
+
+            // Sort delivery dates
+            const sortedDates = Array.from(allDeliveryDates).sort((a, b) => {
+                if (a === 'No Date') return 1;
+                if (b === 'No Date') return -1;
+                return new Date(a) - new Date(b);
+            });
+
+            setDeliveryDates(sortedDates);
+            setOrdersByDeliveryDate(groupedOrders);
+            setSelectedDeliveryDate(sortedDates[0]); // Select first date by default
+
+            // Set orders for the first delivery date
+            setOrders(groupedOrders[sortedDates[0]] || []);
+            setOriginalOrders(JSON.parse(JSON.stringify(groupedOrders[sortedDates[0]] || [])));
 
 
         } catch (err) {
@@ -151,7 +184,8 @@ export default function MealPlanViewer() {
                 // Call new add-dish endpoint
                 const response = await axios.post(`/orders/${token}/add-dish`, {
                     dishId: order.dishId,
-                    mealType: order.meal
+                    mealType: order.meal,
+                    requestedDeliveryDate: selectedDeliveryDate
                 });
 
                 console.log('✅ Successfully added dish:', response.data);
@@ -461,62 +495,32 @@ export default function MealPlanViewer() {
     }, [mealPlanData?.customer?.name, loading]);
 
 
+    // Function to handle delivery date tab change
+    const handleDeliveryDateChange = (deliveryDate) => {
+        setSelectedDeliveryDate(deliveryDate);
+        const ordersForDate = ordersByDeliveryDate[deliveryDate] || [];
+        setOrders(ordersForDate);
+        setOriginalOrders(JSON.parse(JSON.stringify(ordersForDate)));
+    };
+
+    // Format delivery date for display
+    const formatDeliveryDate = (dateString) => {
+        if (dateString === 'No Date') return 'No Date';
+
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
+            });
+        } catch {
+            return dateString;
+        }
+    };
 
 
 
-    // const handleProteinSubstitution = async (orderIndex, newProteinId, oldProteinId) => {
-
-    //     // Save scroll position
-    //     const scrollTop = modalRef.current?.scrollTop || 0;
-
-    //     console.log('Scroll position:', scrollTop);
-
-
-    //     const order = orders[orderIndex];
-
-    //     try {
-    //         setSaving(true);
-
-    //         // Call the protein replacement endpoint
-    //         const response = await axios.patch(`/orders/${token}/replace-protein`, {
-    //             recordId: order.recordId,
-    //             newProteinId: newProteinId,
-    //             oldProteinId: oldProteinId
-    //         });
-
-    //         // Update local state immediately (no reload needed)
-    //         const updatedOrders = [...orders];
-    //         updatedOrders[orderIndex] = {
-    //             ...updatedOrders[orderIndex],
-    //             finalIngredients: response.data.updatedIngredientIds,
-    //             hasCustomIngredients: response.data.updatedIngredientIds.length > 0,
-    //             proteinOptions: {
-    //                 ...updatedOrders[orderIndex].proteinOptions,
-    //                 options: updatedOrders[orderIndex].proteinOptions.options.map(option => ({
-    //                     ...option,
-    //                     isActive: option.id === newProteinId
-    //                 }))
-    //             }
-    //         };
-    //         flushSync(() => {
-    //             setOrders(updatedOrders);
-    //         });
-
-
-    //         setSuccessMessage(`Protein updated successfully!`);
-    //         setTimeout(() => setSuccessMessage(''), 2000);
-
-    //         if (modalRef.current) {
-    //             modalRef.current.scrollTop = scrollTop;
-    //         }
-
-    //     } catch (err) {
-    //         setError(err.response?.data?.error || 'Failed to update protein');
-    //         console.error('Error updating protein:', err);
-    //     } finally {
-    //         setSaving(false);
-    //     }
-    // };
 
     const handleProteinSubstitution = async (orderIndex, newProteinId, oldProteinId) => {
         const order = orders[orderIndex];
@@ -1835,6 +1839,77 @@ export default function MealPlanViewer() {
                         {error}
                     </div>
                 )}
+
+
+                {/* Delivery Date Tabs */}
+                {deliveryDates.length > 1 && (
+                    <div style={{
+                        padding: '0 20px 20px 20px',
+                        borderBottom: '1px solid #eee',
+                        marginBottom: '20px'
+                    }}>
+                        <h4 style={{
+                            marginBottom: '15px',
+                            color: '#333',
+                            fontSize: '16px'
+                        }}>
+                            Delivery Dates
+                        </h4>
+                        <div style={{
+                            display: 'flex',
+                            gap: '10px',
+                            overflowX: 'auto',
+                            paddingBottom: '5px'
+                        }}>
+                            {deliveryDates.map(deliveryDate => (
+                                <button
+                                    key={deliveryDate}
+                                    onClick={() => handleDeliveryDateChange(deliveryDate)}
+                                    style={{
+                                        padding: '8px 16px',
+                                        border: selectedDeliveryDate === deliveryDate
+                                            ? '2px solid #007bff'
+                                            : '1px solid #ddd',
+                                        borderRadius: '20px',
+                                        backgroundColor: selectedDeliveryDate === deliveryDate
+                                            ? '#007bff'
+                                            : '#fff',
+                                        color: selectedDeliveryDate === deliveryDate
+                                            ? '#fff'
+                                            : '#333',
+                                        cursor: 'pointer',
+                                        fontSize: '14px',
+                                        fontWeight: selectedDeliveryDate === deliveryDate
+                                            ? 'bold'
+                                            : 'normal',
+                                        whiteSpace: 'nowrap',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        if (selectedDeliveryDate !== deliveryDate) {
+                                            e.target.style.backgroundColor = '#f8f9fa';
+                                        }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        if (selectedDeliveryDate !== deliveryDate) {
+                                            e.target.style.backgroundColor = '#fff';
+                                        }
+                                    }}
+                                >
+                                    {formatDeliveryDate(deliveryDate)}
+                                    <span style={{
+                                        marginLeft: '6px',
+                                        fontSize: '12px',
+                                        opacity: 0.8
+                                    }}>
+                                        ({(ordersByDeliveryDate[deliveryDate] || []).filter(o => o.quantity > 0).length})
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
 
                 {/* Meal Orders */}
                 <div

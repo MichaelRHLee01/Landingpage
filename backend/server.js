@@ -1181,6 +1181,7 @@ app.get('/api/orders/:token', async (req, res) => {
                 dishId: r.fields['Dish ID'],
                 itemName: r.fields['Airtable ItemName'] || 'Unknown Item',
                 quantity: r.fields['Quantity'] || 0,
+                deliveryDate: r.fields['Delivery Date'],
                 email: r.fields['Email'] || customerRecord.fields['Email'],
                 orderSubscriptionId: r.fields['Order/ Subscription ID'],
                 meal: orderToMealTypeMap[r.id] || 'Snack',
@@ -1214,16 +1215,18 @@ app.get('/api/orders/:token', async (req, res) => {
             };
         }));
 
+
+
         // Step 10: Process available dishes (quantity 0)
         const availableDishesProcessed = await Promise.all(
             availableDishes
-                .filter(availableDish => {
-                    // Only include dishes that aren't already ordered
-                    return !orderedDishes.some(ordered =>
-                        ordered.dishId === availableDish.dishId &&
-                        ordered.meal === availableDish.mealType
-                    );
-                })
+                // .filter(availableDish => {
+                //     // Only include dishes that aren't already ordered
+                //     return !orderedDishes.some(ordered =>
+                //         ordered.dishId === availableDish.dishId &&
+                //         ordered.meal === availableDish.mealType
+                //     );
+                // })
                 .map(async (dish) => {
                     const ingredientsList = dish.ingredientIds.map(id => ingredientNames[id] || id).filter(Boolean);
                     const allIngredients = dish.ingredientIds.map(id => ({
@@ -1286,8 +1289,67 @@ app.get('/api/orders/:token', async (req, res) => {
                 })
         );
 
+        // Step 9.5: After you have OrderedDishes, group by delivery date
+        const orderedDishesByDate = {};
+        orderedDishes.forEach(dish => {
+            const deliveryDate = dish.deliveryDate || 'No Date';
+            if (!orderedDishesByDate[deliveryDate]) {
+                orderedDishesByDate[deliveryDate] = [];
+            }
+            orderedDishesByDate[deliveryDate].push(dish);
+        });
+
+        // Get all unique delivery dates from ordered dishes
+        const allDeliveryDates = Object.keys(orderedDishesByDate);
+
+        // For each delivery date, add available dishes that aren't already ordered
+        const allDishesWithDeliveryDates = [];
+
+        for (const deliveryDate of allDeliveryDates) {
+            const orderedForDate = orderedDishesByDate[deliveryDate];
+
+            console.log(`📅 ${deliveryDate}:`);
+            console.log('  Ordered:', orderedForDate.map(d => `${d.meal}: ${d.itemName}`));
+
+
+            // Add ordered dishes for this delivery date
+            allDishesWithDeliveryDates.push(...orderedForDate.map(dish => ({
+                ...dish,
+                deliveryDate: deliveryDate
+            })));
+
+            // Add available dishes for this delivery date (only those not already ordered for this date)
+            const availableForDate = availableDishesProcessed.filter(availableDish => {
+                return !orderedForDate.some(ordered =>
+                    ordered.dishId === availableDish.dishId &&
+                    ordered.meal === availableDish.mealType
+                );
+            });
+
+            console.log('  Available:', availableForDate.map(d => `${d.meal}: ${d.itemName}`));
+
+
+
+            allDishesWithDeliveryDates.push(...availableForDate.map(dish => ({
+                ...dish,
+                deliveryDate: deliveryDate
+            })));
+
+
+        }
+
+        // If no ordered dishes exist, still show available dishes for a default date
+        if (allDeliveryDates.length === 0) {
+            const defaultDate = 'Available';
+            allDishesWithDeliveryDates.push(...availableDishesProcessed.map(dish => ({
+                ...dish,
+                deliveryDate: defaultDate
+            })));
+        }
+
+
         // Combine ordered + available dishes
-        const allDishes = [...orderedDishes, ...availableDishesProcessed];
+        //const allDishes = [...orderedDishes, ...availableDishesProcessed];
 
         console.log(`📋 Returning ${orderedDishes.length} ordered + ${availableDishesProcessed.length} available dishes`);
 
@@ -1318,7 +1380,8 @@ app.get('/api/orders/:token', async (req, res) => {
             },
             nutritionGoals: clientGoals,
             currentTotals: currentTotals,
-            orders: allDishes, // Now includes both ordered + available
+            // orders: allDishes, // Now includes both ordered + available
+            orders: allDishesWithDeliveryDates, // Now includes delivery date info
             //Subscription data
             subscriptions: await getCustomerSubscriptions(customerName),
             summary: {
@@ -1937,7 +2000,8 @@ app.patch('/api/orders/:token/toggle-garnish', async (req, res) => {
 app.post('/api/orders/:token/add-dish', async (req, res) => {
     try {
         const token = req.params.token;
-        const { dishId, mealType } = req.body;
+        const { dishId, mealType, requestedDeliveryDate } = req.body;
+
 
         console.log('🍽️ Adding new dish:', dishId, mealType, 'for token:', token);
 
@@ -1983,24 +2047,6 @@ app.post('/api/orders/:token/add-dish', async (req, res) => {
 
         console.log('✅ Found client record for meal type:', mealType, 'Record ID:', specificClientRecord.id);
 
-        // Check if dish already exists for this customer/meal type
-        const existingDish = await base('Open Orders').select({
-            filterByFormula: `AND(
-                ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}',
-                {Dish ID} = ${dishId},
-                {Meal Portion} = '${mealType}',
-                {Quantity} > 0
-            )`,
-            maxRecords: 1
-        }).all();
-
-        if (existingDish.length > 0) {
-            return res.status(409).json({
-                error: 'Dish already exists',
-                details: 'This dish is already in your meal plan. Try updating the quantity instead.',
-                recordId: existingDish[0].id
-            });
-        }
 
         // Clean up any zero-quantity records for this dish
         const zeroQuantityRecords = await base('Open Orders').select({
@@ -2110,6 +2156,32 @@ app.post('/api/orders/:token/add-dish', async (req, res) => {
         console.log('  Order Subscription ID:', orderSubscriptionId);
         console.log('  SquareSpace ID:', squareSpaceId);
 
+
+        const finalDeliveryDate = requestedDeliveryDate || deliveryDate;
+
+        // Check if dish already exists for this customer/meal type
+        const existingDish = await base('Open Orders').select({
+            filterByFormula: `AND(
+                ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}',
+                {Dish ID} = ${dishId},
+                {Meal Portion} = '${mealType}',
+                {Delivery Date} = '${finalDeliveryDate}',
+                {Quantity} > 0
+            )`,
+            maxRecords: 1
+        }).all();
+
+        if (existingDish.length > 0) {
+            return res.status(409).json({
+                error: 'Dish already exists',
+                details: 'This dish is already in your meal plan. Try updating the quantity instead.',
+                recordId: existingDish[0].id
+            });
+        }
+
+        console.log('📅 Using delivery date:', finalDeliveryDate, 'requested:', requestedDeliveryDate, 'fallback:', deliveryDate);
+
+
         const newOrderRecord = await base('Open Orders').create([{
             fields: {
                 'Order/ Subscription ID': orderSubscriptionId,
@@ -2121,7 +2193,7 @@ app.post('/api/orders/:token/add-dish', async (req, res) => {
                 'To_Match_Client_Nutrition': [specificClientRecord.id], // ✅ FIXED: Use record ID
                 'Airtable ItemName': itemName,
                 'Order Placed/ Algo Ran At': new Date().toISOString().split('T')[0],
-                'Delivery Date': deliveryDate,
+                'Delivery Date': finalDeliveryDate,
                 'Dish ID': dishId,
                 'Original Ingredients': ingredientIds,
                 'Ingredients To Recommend': ingredientIds,
