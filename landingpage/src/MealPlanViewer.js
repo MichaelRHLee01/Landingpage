@@ -207,6 +207,12 @@ export default function MealPlanViewer() {
                         ...updatedOrders.filter(order => order.quantity === 0)
                     ];
                     setOrders(sorted);
+
+                    setOrdersByDeliveryDate(prev => ({
+                        ...prev,
+                        [selectedDeliveryDate]: sorted
+                    }));
+
                 });
 
                 // Update original orders to reflect saved state
@@ -268,6 +274,12 @@ export default function MealPlanViewer() {
                             ...updatedOrders.filter(order => order.quantity === 0)
                         ];
                         setOrders(sorted);
+
+                        setOrdersByDeliveryDate(prev => ({
+                            ...prev,
+                            [selectedDeliveryDate]: sorted
+                        }));
+
                     });
 
                     await axios.patch(`/orders/${token}/quantity`, {
@@ -298,6 +310,12 @@ export default function MealPlanViewer() {
                             ...updatedOrders.filter(order => order.quantity === 0)
                         ];
                         setOrders(sorted);
+
+                        setOrdersByDeliveryDate(prev => ({
+                            ...prev,
+                            [selectedDeliveryDate]: sorted
+                        }));
+
                     });
 
                     // Make backend call
@@ -331,6 +349,12 @@ export default function MealPlanViewer() {
                         ];
                         setOrders(sorted);
 
+                        setOrdersByDeliveryDate(prev => ({
+                            ...prev,
+                            [selectedDeliveryDate]: sorted
+                        }));
+
+
                     });
 
                 } else {
@@ -355,6 +379,12 @@ export default function MealPlanViewer() {
                             ...updatedOrders.filter(order => order.quantity === 0)
                         ];
                         setOrders(sorted);
+
+                        setOrdersByDeliveryDate(prev => ({
+                            ...prev,
+                            [selectedDeliveryDate]: sorted
+                        }));
+
                     });
 
                     await axios.patch(`/orders/${token}/quantity`, {
@@ -578,6 +608,12 @@ export default function MealPlanViewer() {
 
             flushSync(() => {
                 setOrders(updatedOrders);
+
+                setOrdersByDeliveryDate(prev => ({
+                    ...prev,
+                    [selectedDeliveryDate]: updatedOrders
+                }));
+
             });
 
             const message = upgradePrice > 0
@@ -632,6 +668,12 @@ export default function MealPlanViewer() {
             };
             flushSync(() => {
                 setOrders(updatedOrders);
+
+                setOrdersByDeliveryDate(prev => ({
+                    ...prev,
+                    [selectedDeliveryDate]: updatedOrders
+                }));
+
             });
 
             setSuccessMessage(
@@ -1282,6 +1324,12 @@ export default function MealPlanViewer() {
             };
             flushSync(() => {
                 setOrders(updatedOrders);
+
+                setOrdersByDeliveryDate(prev => ({
+                    ...prev,
+                    [selectedDeliveryDate]: updatedOrders
+                }));
+
             });
             setSuccessMessage('Sauce updated successfully!');
             setTimeout(() => setSuccessMessage(''), 2000);
@@ -1329,6 +1377,12 @@ export default function MealPlanViewer() {
             };
             flushSync(() => {
                 setOrders(updatedOrders);
+
+                setOrdersByDeliveryDate(prev => ({
+                    ...prev,
+                    [selectedDeliveryDate]: updatedOrders
+                }));
+
             });
             setSuccessMessage(
                 isCurrentlyActive ? 'Garnish removed' : 'Garnish added'
@@ -1378,6 +1432,12 @@ export default function MealPlanViewer() {
             };
             flushSync(() => {
                 setOrders(updatedOrders);
+
+                setOrdersByDeliveryDate(prev => ({
+                    ...prev,
+                    [selectedDeliveryDate]: updatedOrders
+                }));
+
             });
             setSuccessMessage(
                 isCurrentlyActive ? 'Veggie removed' : 'Veggie added'
@@ -1427,6 +1487,12 @@ export default function MealPlanViewer() {
             };
             flushSync(() => {
                 setOrders(updatedOrders);
+
+                setOrdersByDeliveryDate(prev => ({
+                    ...prev,
+                    [selectedDeliveryDate]: updatedOrders
+                }));
+
             });
             setSuccessMessage('Starch updated successfully!');
             setTimeout(() => setSuccessMessage(''), 2000);
