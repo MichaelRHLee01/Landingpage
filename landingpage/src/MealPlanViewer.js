@@ -817,27 +817,29 @@ export default function MealPlanViewer() {
                         Qty: {meal.quantity}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleQuantityChange(actualIndex, Math.max(0, meal.quantity - 1));
-                            }}
-                            disabled={saving || meal.quantity <= 0}
-                            style={{
-                                padding: '2px 6px',
-                                border: '1px solid #dc3545',
-                                borderRadius: '3px',
-                                backgroundColor: '#f8f9fa',
-                                color: '#dc3545',
-                                cursor: (saving || meal.quantity <= 0) ? 'not-allowed' : 'pointer',
-                                fontSize: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}
-                        >
-                            Remove
-                        </button>
+                        {meal.quantity > 0 && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleQuantityChange(actualIndex, Math.max(0, meal.quantity - 1));
+                                }}
+                                disabled={saving || meal.quantity <= 0}
+                                style={{
+                                    padding: '2px 6px',
+                                    border: '1px solid #dc3545',
+                                    borderRadius: '3px',
+                                    backgroundColor: '#f8f9fa',
+                                    color: '#dc3545',
+                                    cursor: (saving || meal.quantity <= 0) ? 'not-allowed' : 'pointer',
+                                    fontSize: '12px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}
+                            >
+                                Remove
+                            </button>
+                        )}
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -1243,6 +1245,8 @@ export default function MealPlanViewer() {
                 }}>
                     {proteinData.options.map((proteinOption, index) => {
                         const isActive = proteinOption.isActive;
+                        const hasUpgradePrice = proteinOption.price && proteinOption.price > 0;
+
                         return (
                             <button
                                 key={index}
@@ -1276,6 +1280,16 @@ export default function MealPlanViewer() {
                                     {isActive ? '✓' : '+'}
                                 </span>
                                 {proteinOption.displayName || proteinOption.name}
+                                {hasUpgradePrice && (
+                                    <span style={{
+                                        marginLeft: '4px',
+                                        fontSize: '11px',
+                                        fontWeight: 'bold',
+                                        color: '#856404'
+                                    }}>
+                                        (+${proteinOption.price})
+                                    </span>
+                                )}
                             </button>
                         );
                     })}
