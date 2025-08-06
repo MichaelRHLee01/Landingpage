@@ -70,17 +70,17 @@ const getCustomerSubscriptions = async (customerName) => {
             fields: ['Meal', '# of Meals Included']
         }).all();
 
-        console.log('Raw subscription records:', subscriptionRecords.map(r => ({
-            meal: r.fields['Meal'],
-            mealsIncluded: r.fields['# of Meals Included']
-        })));
+        // console.log('Raw subscription records:', subscriptionRecords.map(r => ({
+        //     meal: r.fields['Meal'],
+        //     mealsIncluded: r.fields['# of Meals Included']
+        // })));
 
         const subscriptions = subscriptionRecords.map(record => ({
             meal: record.fields['Meal'],
             mealsIncluded: record.fields['# of Meals Included'] || 0
         }));
 
-        console.log('Processed subscriptions:', subscriptions);
+        // console.log('Processed subscriptions:', subscriptions);
         return subscriptions;
 
     } catch (error) {
@@ -807,25 +807,27 @@ app.post('/api/send-emails', async (req, res) => {
 // Main GET endpoint with zero-quantity filtering
 app.get('/api/orders/:token', async (req, res) => {
     console.log('🚨 API REQUEST RECEIVED:', req.params.token);
+    console.time('🚨 TOTAL API TIME');
 
     try {
         const token = req.params.token;
 
-
-
-
+        console.time('Step 1: Customer Records');
         // Step 1: Find the customer record first (with filtering to reduce data)
-        const customerRecords = await base('Client').select({
+        const allClientRecords = await base('Client').select({
             filterByFormula: `{Unique ID} = '${token}'`,
-            maxRecords: 1
+            // maxRecords: 1
         }).all();
 
-        if (!customerRecords.length) {
+        if (!allClientRecords.length) {
             return res.status(404).json({ error: 'Customer not found' });
         }
 
-        const customerRecord = customerRecords[0];
-        console.log('Found customer:', customerRecord.fields.First_Name, customerRecord.fields.Last_Name);
+        const customerRecord = allClientRecords[0];
+        // console.log('Found customer:', customerRecord.fields.First_Name, customerRecord.fields.Last_Name);
+
+        console.timeEnd('Step 1: Customer Records');
+        console.time('Step 2: Order Records');
 
         // Step 2: Get client nutrition profile using the identifier
         const clientIdentifier = customerRecord.fields['identifier'];
@@ -840,9 +842,10 @@ app.get('/api/orders/:token', async (req, res) => {
             identifier: clientIdentifier
         });
 
-        const allClientRecords = await base('Client').select({
-            filterByFormula: `{Unique ID} = '${token}'`
-        }).all();
+        // const allClientRecords = await base('Client').select({
+        //     filterByFormula: `{Unique ID} = '${token}'`
+        // }).all();
+        // const allClientRecords = customerRecords[0];
 
         console.log('🔍 Found', allClientRecords.length, 'client records for this customer:');
         allClientRecords.forEach((record, i) => {
@@ -861,11 +864,6 @@ app.get('/api/orders/:token', async (req, res) => {
 
         console.log('Using client profile for:', clientProfile.fields['First_Name'], clientProfile.fields['Last_Name'], '- Meal:', clientProfile.fields['Meal']);
 
-        // Step 3: Get orders from ALL client records (combine all meal types)
-        // const orderRecords = await base('Open Orders').select({
-        //     filterByFormula: `ARRAYJOIN({Unique ID (from To_Match_Client_Nutrition)}, "") = '${token}'`,
-        // }).all();
-
 
         const orderRecords = await base('Open Orders').select({
             filterByFormula: `AND(
@@ -878,6 +876,10 @@ app.get('/api/orders/:token', async (req, res) => {
 
 
         const orderToMealTypeMap = {};
+
+        console.timeEnd('Step 2: Order Records');
+        console.time('Step 3: Available Dishes');
+
 
         // Step 4: Handle case with no existing orders
         if (!orderRecords.length) {
@@ -1012,6 +1014,11 @@ app.get('/api/orders/:token', async (req, res) => {
             });
         }
 
+
+        console.timeEnd('Step 3: Available Dishes');
+        console.time('Step 4: Ingredient Fetching');
+
+
         console.log('Successfully loaded', orderRecords.length, 'order records');
 
         // Step 5: Get unique ingredient record IDs to resolve names
@@ -1142,6 +1149,10 @@ app.get('/api/orders/:token', async (req, res) => {
             }
         }
 
+        console.timeEnd('Step 4: Ingredient Fetching');
+        console.time('Step 5: Processing Orders');
+
+
         // Step 9: Format response with RESOLVED INGREDIENTS
         const orderedDishes = await Promise.all(orderRecords.map(async (r) => {
             const originalIngredientIds = r.fields['Original Ingredients'] || [];
@@ -1214,6 +1225,10 @@ app.get('/api/orders/:token', async (req, res) => {
                 isOrdered: true
             };
         }));
+
+        console.timeEnd('Step 5: Processing Orders');
+        console.time('Step 6: Processing Available');
+
 
 
 
@@ -1308,8 +1323,8 @@ app.get('/api/orders/:token', async (req, res) => {
         for (const deliveryDate of allDeliveryDates) {
             const orderedForDate = orderedDishesByDate[deliveryDate];
 
-            console.log(`📅 ${deliveryDate}:`);
-            console.log('  Ordered:', orderedForDate.map(d => `${d.meal}: ${d.itemName}`));
+            // console.log(`📅 ${deliveryDate}:`);
+            // console.log('  Ordered:', orderedForDate.map(d => `${d.meal}: ${d.itemName}`));
 
 
             // Add ordered dishes for this delivery date
@@ -1322,11 +1337,11 @@ app.get('/api/orders/:token', async (req, res) => {
             const availableForDate = availableDishesProcessed.filter(availableDish => {
                 return !orderedForDate.some(ordered =>
                     ordered.dishId === availableDish.dishId &&
-                    ordered.meal === availableDish.mealType
+                    ordered.meal === availableDish.meal
                 );
             });
 
-            console.log('  Available:', availableForDate.map(d => `${d.meal}: ${d.itemName}`));
+            // console.log('  Available:', availableForDate.map(d => `${d.meal}: ${d.itemName}`));
 
 
 
@@ -1347,11 +1362,13 @@ app.get('/api/orders/:token', async (req, res) => {
             })));
         }
 
+        console.timeEnd('Step 6: Processing Available');
+
 
         // Combine ordered + available dishes
         //const allDishes = [...orderedDishes, ...availableDishesProcessed];
 
-        console.log(`📋 Returning ${orderedDishes.length} ordered + ${availableDishesProcessed.length} available dishes`);
+        // console.log(`📋 Returning ${orderedDishes.length} ordered + ${availableDishesProcessed.length} available dishes`);
 
         // Step 11: Include client nutrition goals and restrictions
         const clientGoals = {
@@ -1389,6 +1406,9 @@ app.get('/api/orders/:token', async (req, res) => {
                 calorieProgress: clientGoals.calories > 0 ? (currentTotals.calories / clientGoals.calories * 100).toFixed(1) : 0
             }
         };
+
+        console.timeEnd('🚨 TOTAL API TIME');
+
 
         res.json(response);
         console.log('✅ Response sent successfully!');
