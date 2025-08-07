@@ -146,10 +146,27 @@ export default function MealPlanViewer() {
 
         // Find subscription record for this meal type
         const subscription = mealPlanData.subscriptions.find(sub =>
-            sub.meal?.toLowerCase().includes(mealType.toLowerCase())
+            sub.meal?.toLowerCase().includes(mealType.toLowerCase()) &&
+            sub.deliveryDate === selectedDeliveryDate
         );
 
         return subscription?.mealsIncluded || 0;
+    };
+
+    // Get ordered meal count function
+    const getOrderedMealCount = (mealType, deliveryDate = null) => {
+        const targetDate = deliveryDate || selectedDeliveryDate;
+
+        // Count total quantity for this meal type on this delivery date
+        const orderedCount = orders
+            .filter(order =>
+                order.meal === mealType &&
+                order.deliveryDate === targetDate &&
+                order.quantity > 0 // Only count meals that are actually ordered
+            )
+            .reduce((total, order) => total + order.quantity, 0);
+
+        return orderedCount;
     };
 
 
@@ -2003,8 +2020,6 @@ export default function MealPlanViewer() {
                     {/* Group orders by meal type */}
                     {['Breakfast', 'Lunch', 'Dinner', 'Snack'].map(mealType => {
 
-
-
                         const mealOrders = orders.filter(order => order.meal === mealType);
                         // console.log(`${mealType}: ${mealOrders.length} items, shouldShowArrows: ${shouldShowArrows(mealOrders.length)}`);
 
@@ -2021,15 +2036,19 @@ export default function MealPlanViewer() {
 
                         // Get subscription count for this meal type (ignore snacks)
                         const subscriptionCount = getSubscriptionCount(mealType);
+                        const orderedCount = getOrderedMealCount(mealType, selectedDeliveryDate);
 
                         // Determine the text based on meal type
-                        const getSubscriptionText = (mealType, count) => {
+                        const getSubscriptionText = (mealType, subscribed, ordered) => {
                             if (mealType === 'Snack') {
-                                return count === 1 ? `${count} day subscribed` : `${count} days subscribed`;
+                                // Keep original format for snacks
+                                return subscribed === 1 ? `${subscribed} day subscribed` : `${subscribed} days subscribed`;
                             } else {
-                                return count === 1 ? `${count} meal subscribed` : `${count} meals subscribed`;
+                                // NEW: Show both subscribed and selected for breakfast/lunch/dinner
+                                return `${subscribed} meal${subscribed !== 1 ? 's' : ''} subscribed, ${ordered} selected`;
                             }
                         };
+
 
                         console.log(`Rendering ${mealType}:`, {
                             subscriptionCount,
@@ -2052,7 +2071,7 @@ export default function MealPlanViewer() {
                                         fontWeight: 'normal',
                                         marginLeft: '8px'
                                     }}>
-                                        ({getSubscriptionText(mealType, subscriptionCount)})
+                                        ({getSubscriptionText(mealType, subscriptionCount, orderedCount)})
                                     </span>
                                 </h4>
                                 <div style={{ position: 'relative' }}>

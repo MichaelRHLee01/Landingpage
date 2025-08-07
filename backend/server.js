@@ -67,17 +67,13 @@ const getCustomerSubscriptions = async (customerName) => {
     try {
         const subscriptionRecords = await base('Subscriptions').select({
             filterByFormula: `{Customer Name} = '${customerName}'`,
-            fields: ['Meal', '# of Meals Included']
+            fields: ['Meal', '# of Meals Included', 'Next Delivery Date']
         }).all();
-
-        // console.log('Raw subscription records:', subscriptionRecords.map(r => ({
-        //     meal: r.fields['Meal'],
-        //     mealsIncluded: r.fields['# of Meals Included']
-        // })));
 
         const subscriptions = subscriptionRecords.map(record => ({
             meal: record.fields['Meal'],
-            mealsIncluded: record.fields['# of Meals Included'] || 0
+            mealsIncluded: record.fields['# of Meals Included'] || 0,
+            deliveryDate: record.fields['Next Delivery Date']
         }));
 
         // console.log('Processed subscriptions:', subscriptions);
@@ -903,6 +899,7 @@ app.get('/api/orders/:token', async (req, res) => {
 
             const ingredientNames = {};
             const ingredientComponents = {};
+
 
             if (ingredientRecordIds.size > 0) {
                 const ingredientIdArray = Array.from(ingredientRecordIds);
