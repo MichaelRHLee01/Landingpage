@@ -164,25 +164,53 @@ const getSauceAndGarnishOptions = async (allIngredientIds, ingredientNames, ingr
     };
 };
 
+// let CACHED_VARIANTS = null;
+
+// const getCachedVariants = async () => {
+//     if (CACHED_VARIANTS) return CACHED_VARIANTS;
+
+//     try {
+//         console.log('📦 Caching all variants...');
+//         const allVariants = await base('Variants').select({
+//             filterByFormula: `{Availability} = TRUE()`
+//         }).all();
+
+//         CACHED_VARIANTS = allVariants;
+//         console.log(`📦 Cached ${allVariants.length} variants`);
+//         return allVariants;
+//     } catch (err) {
+//         console.warn('Could not cache variants:', err.message);
+//         return [];
+//     }
+// };
+
 let CACHED_VARIANTS = null;
+let CACHE_TIMESTAMP = null;
 
 const getCachedVariants = async () => {
-    if (CACHED_VARIANTS) return CACHED_VARIANTS;
+    const now = Date.now();
+
+    if (CACHED_VARIANTS && CACHE_TIMESTAMP && (now - CACHE_TIMESTAMP < 300000)) { // 5 min cache
+        console.log('📦 Using cached variants (cache hit)');
+        return CACHED_VARIANTS;
+    }
 
     try {
-        console.log('📦 Caching all variants...');
+        console.log('📦 Fetching variants from Airtable (cache miss)');
         const allVariants = await base('Variants').select({
             filterByFormula: `{Availability} = TRUE()`
         }).all();
 
         CACHED_VARIANTS = allVariants;
+        CACHE_TIMESTAMP = now;
         console.log(`📦 Cached ${allVariants.length} variants`);
         return allVariants;
     } catch (err) {
         console.warn('Could not cache variants:', err.message);
-        return [];
+        return CACHED_VARIANTS || [];
     }
 };
+
 
 const getCurrentProteinId = (currentIngredients, ingredientComponents) => {
     for (const ingredientId of currentIngredients) {
