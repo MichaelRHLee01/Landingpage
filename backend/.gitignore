@@ -1,1 +1,4 @@
 .env
+squarefare.db
+squarefare.db-wal
+squarefare.db-shm
